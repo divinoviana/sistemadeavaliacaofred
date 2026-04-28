@@ -1,0 +1,130 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+
+interface AuthContextType {
+  student: any | null;
+  teacherSubject: string | null;
+  loginStudent: (data: any) => void;
+  logoutStudent: () => Promise<void>;
+  updateStudentData: (newData: any) => void;
+  loginTeacher: (subject: string) => void;
+  logoutTeacher: () => void;
+  isLoading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [student, setStudent] = useState<any | null>(null);
+  const [teacherSubject, setTeacherSubject] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadStudent(userId: string, fallbackEmail?: string | null, fallbackName?: string | null) {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (!mounted) return;
+
+        if (data) {
+          setStudent(data);
+        } else if (!error) {
+          // Autenticado mas sem registro em students (ex.: admin via Google)
+          setStudent({ id: userId, email: fallbackEmail || '', name: fallbackName || 'Usuário' });
+        } else {
+          console.warn('Falha ao buscar student:', error.message);
+          setStudent({ id: userId, email: fallbackEmail || '', name: fallbackName || 'Usuário' });
+        }
+      } catch (err) {
+        console.error('Erro inesperado ao buscar student:', err);
+        if (mounted) setStudent({ id: userId, email: fallbackEmail || '', name: fallbackName || 'Usuário' });
+      }
+    }
+
+    // Restaura sessão atual
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user) {
+        loadStudent(
+          session.user.id,
+          session.user.email,
+          session.user.user_metadata?.full_name || session.user.user_metadata?.name
+        ).finally(() => mounted && setIsLoading(false));
+      } else {
+        setIsLoading(false);
+      }
+
+      const savedTeacher = sessionStorage.getItem('CHSA_TEACHER_SESSION');
+      if (savedTeacher && mounted) setTeacherSubject(savedTeacher);
+    });
+
+    // Listener de mudanças de auth
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        loadStudent(
+          session.user.id,
+          session.user.email,
+          session.user.user_metadata?.full_name || session.user.user_metadata?.name
+        );
+      } else {
+        setStudent(null);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const loginStudent = (data: any) => {
+    setStudent(data);
+  };
+
+  const updateStudentData = (newData: any) => {
+    setStudent((prev: any) => ({ ...(prev || {}), ...newData }));
+  };
+
+  const logoutStudent = async () => {
+    await supabase.auth.signOut();
+    setStudent(null);
+  };
+
+  const loginTeacher = (subject: string) => {
+    sessionStorage.setItem('CHSA_TEACHER_SESSION', subject);
+    setTeacherSubject(subject);
+  };
+
+  const logoutTeacher = () => {
+    sessionStorage.removeItem('CHSA_TEACHER_SESSION');
+    setTeacherSubject(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{
+      student,
+      teacherSubject,
+      loginStudent,
+      logoutStudent,
+      updateStudentData,
+      loginTeacher,
+      logoutTeacher,
+      isLoading
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth deve ser usado dentro de um AuthProvider');
+  return context;
+};

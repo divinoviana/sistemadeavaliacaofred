@@ -1,0 +1,201 @@
+
+import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Camera, Upload, X, ArrowLeft, Loader2, Save, User } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+
+export const Profile: React.FC = () => {
+  const { student, updateStudentData } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [newPhoto, setNewPhoto] = useState<string | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const startCamera = async () => {
+    setShowCamera(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    } catch (err) {
+      alert("Câmera indisponível.");
+      setShowCamera(false);
+    }
+  };
+
+  const takePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      
+      // Cap max resolution to prevent exceeding 1MB Firestore limit
+      const maxDim = 512;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
+      
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = (maxDim / width) * height;
+          width = maxDim;
+        } else {
+          width = (maxDim / height) * width;
+          height = maxDim;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(video, 0, 0, width, height);
+      
+      // Use lower quality to ensure size is below 1MB
+      setNewPhoto(canvas.toDataURL('image/jpeg', 0.6));
+      
+      const stream = video.srcObject as MediaStream;
+      stream.getTracks().forEach(t => t.stop());
+      setShowCamera(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!newPhoto || !student) return;
+    setLoading(true);
+    try {
+      const profileData: any = {
+        id: student.id,
+        photo_url: newPhoto,
+      };
+
+      // Para admins/professores sem perfil completo de aluno, populamos os requisitos mínimos
+      if (!student.grade || !student.school_class) {
+        profileData.name = student.name || 'Usuário';
+        profileData.email = student.email || '';
+        profileData.role = 'admin';
+        profileData.grade = student.grade || 'N/A';
+        profileData.school_class = student.school_class || 'N/A';
+      }
+
+      const { error } = await supabase
+        .from('students')
+        .upsert(profileData, { onConflict: 'id' });
+      if (error) throw error;
+
+      updateStudentData(profileData);
+      alert("Foto atualizada com sucesso!");
+      setNewPhoto(null);
+    } catch (err: any) {
+      console.error("Save Profile Error:", err);
+      const msg = (err?.message || '').toLowerCase();
+      if (msg.includes('permission') || msg.includes('rls')) {
+        alert("Erro de permissão: você não tem autorização para editar este perfil.");
+      } else {
+        alert("Erro ao salvar perfil: " + (err?.message || 'tente novamente.'));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!student) return null;
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans p-4 transition-colors duration-300">
+      <div className="container mx-auto max-w-md bg-white dark:bg-slate-900 rounded-[40px] shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden mt-8 transition-colors duration-300">
+        <div className="p-6 border-b dark:border-slate-800 flex items-center justify-between">
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full dark:text-slate-400">
+            <ArrowLeft size={20} />
+          </button>
+          <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-100">Meu Perfil</h2>
+          <div className="w-8" />
+        </div>
+
+        <div className="p-8 space-y-8 text-center">
+          <div className="relative inline-block group">
+            <div className="w-32 h-32 rounded-[32px] overflow-hidden border-4 border-tocantins-blue dark:border-tocantins-yellow shadow-lg">
+              <img src={newPhoto || student.photo_url} className="w-full h-full object-cover" />
+            </div>
+            {loading && (
+              <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 flex items-center justify-center rounded-[32px]">
+                <Loader2 className="animate-spin text-tocantins-blue dark:text-tocantins-yellow" />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase">{student.name}</h3>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{student.grade}ª Série • {student.school_class}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-center justify-center gap-2 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-tocantins-blue dark:hover:border-tocantins-yellow transition-all cursor-pointer text-[10px] font-black uppercase dark:text-slate-300">
+              <Upload size={16} /> Arquivo
+              <input type="file" accept="image/*" className="hidden" onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                      const canvas = document.createElement('canvas');
+                      const maxDim = 512;
+                      let width = img.width;
+                      let height = img.height;
+
+                      if (width > maxDim || height > maxDim) {
+                        if (width > height) {
+                          height = (maxDim / width) * height;
+                          width = maxDim;
+                        } else {
+                          width = (maxDim / height) * width;
+                          height = maxDim;
+                        }
+                      }
+
+                      canvas.width = width;
+                      canvas.height = height;
+                      const ctx = canvas.getContext('2d');
+                      ctx?.drawImage(img, 0, 0, width, height);
+                      setNewPhoto(canvas.toDataURL('image/jpeg', 0.6));
+                    };
+                    img.src = event.target?.result as string;
+                  };
+                  reader.readAsDataURL(file);
+                }
+              }} />
+            </label>
+            <button onClick={startCamera} className="flex items-center justify-center gap-2 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-tocantins-blue dark:hover:border-tocantins-yellow transition-all text-[10px] font-black uppercase dark:text-slate-300">
+              <Camera size={16} /> Câmera
+            </button>
+          </div>
+
+          {newPhoto && (
+            <button onClick={handleSave} disabled={loading} className="w-full bg-green-600 dark:bg-green-700 text-white p-5 rounded-2xl font-black uppercase text-xs shadow-lg shadow-green-100 dark:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer">
+              {loading ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+              Salvar Nova Foto
+            </button>
+          )}
+        </div>
+
+        {showCamera && (
+          <div className="fixed inset-0 z-[200] bg-slate-900 flex flex-col items-center justify-center p-4">
+            <div className="relative w-full max-w-sm aspect-square rounded-3xl overflow-hidden shadow-2xl">
+              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            </div>
+            <div className="mt-8 flex gap-4">
+              <button onClick={() => setShowCamera(false)} className="bg-white/10 text-white p-4 rounded-full">
+                <X size={24} />
+              </button>
+              <button onClick={takePhoto} className="bg-tocantins-blue text-white p-6 rounded-full shadow-2xl scale-110">
+                <Camera size={32} />
+              </button>
+            </div>
+            <canvas ref={canvasRef} className="hidden" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

@@ -1,0 +1,7 @@
+{
+  "name": "CHS",
+  "description": "Dashboard administrativo para gestão pedagógica, aulas e avaliações.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
