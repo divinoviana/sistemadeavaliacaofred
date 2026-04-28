@@ -51,8 +51,13 @@ export const Home: React.FC = () => {
 
       setExams(examData);
       setFinishedExamTitles(subData);
-    } catch (e) {
-      console.error('Erro ao buscar provas e histórico:', e);
+    } catch (e: any) {
+      // Log detalhado: imprime mensagem, código e detalhes do erro Supabase
+      console.error('Erro ao buscar provas e histórico:',
+        e?.message || e, e?.code ? `(code: ${e.code})` : '',
+        e?.details ? `details: ${e.details}` : '',
+        e?.hint ? `hint: ${e.hint}` : ''
+      );
     }
   };
 

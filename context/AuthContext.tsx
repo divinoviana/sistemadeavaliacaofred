@@ -47,22 +47,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Restaura sessão atual
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        loadStudent(
-          session.user.id,
-          session.user.email,
-          session.user.user_metadata?.full_name || session.user.user_metadata?.name
-        ).finally(() => mounted && setIsLoading(false));
-      } else {
-        setIsLoading(false);
-      }
+    // Restaura sessão atual — com timeout de segurança para nunca travar o spinner
+    const safetyTimeout = setTimeout(() => {
+      if (mounted) setIsLoading(false);
+    }, 8000);
 
-      const savedTeacher = sessionStorage.getItem('CHSA_TEACHER_SESSION');
-      if (savedTeacher && mounted) setTeacherSubject(savedTeacher);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (!mounted) return;
+        if (session?.user) {
+          loadStudent(
+            session.user.id,
+            session.user.email,
+            session.user.user_metadata?.full_name || session.user.user_metadata?.name
+          ).finally(() => {
+            if (mounted) {
+              clearTimeout(safetyTimeout);
+              setIsLoading(false);
+            }
+          });
+        } else {
+          clearTimeout(safetyTimeout);
+          setIsLoading(false);
+        }
+
+        const savedTeacher = sessionStorage.getItem('CHSA_TEACHER_SESSION');
+        if (savedTeacher && mounted) setTeacherSubject(savedTeacher);
+      })
+      .catch((err) => {
+        console.error('[Auth] getSession falhou:', err);
+        if (mounted) {
+          clearTimeout(safetyTimeout);
+          setIsLoading(false);
+        }
+      });
 
     // Listener de mudanças de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
