@@ -3,8 +3,9 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { subjectsInfo } from '../data';
 import { TEACHER_INFO } from '../data_admin';
-import { BookOpen, GraduationCap, ChevronRight, BrainCircuit, BellRing, Loader2 } from 'lucide-react';
+import { BookOpen, GraduationCap, ChevronRight, BrainCircuit, BellRing, Loader2, Clock } from 'lucide-react';
 import { Subject } from '../types';
+import { curriculumData } from '../data';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -13,6 +14,7 @@ export const Home: React.FC = () => {
   const { student, isLoading } = useAuth();
   const [exams, setExams] = useState<any[]>([]);
   const [finishedExamTitles, setFinishedExamTitles] = useState<string[]>([]);
+  const [publishedCountBySubject, setPublishedCountBySubject] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!isLoading && !student) {
@@ -51,6 +53,40 @@ export const Home: React.FC = () => {
 
       setExams(examData);
       setFinishedExamTitles(subData);
+
+      // Conta atividades publicadas por matéria, restritas à série do aluno
+      const myGradeNum = Number(student.grade);
+      const lessonIdsOfMyGrade = new Set<string>();
+      const lessonSubjectMap: Record<string, string> = {};
+      curriculumData.forEach((g) => {
+        if (g.id !== myGradeNum) return;
+        g.bimesters.forEach((b) => {
+          b.lessons.forEach((l) => {
+            lessonIdsOfMyGrade.add(l.id);
+            lessonSubjectMap[l.id] = l.subject;
+          });
+        });
+      });
+
+      const [actsRes, qsRes] = await Promise.all([
+        supabase.from('activities').select('lesson_id'),
+        supabase.from('questions').select('lesson_id'),
+      ]);
+
+      const lessonIdsWithQuestions = new Set<string>();
+      (qsRes.data || []).forEach((row: any) => {
+        if (row.lesson_id) lessonIdsWithQuestions.add(row.lesson_id);
+      });
+
+      const counts: Record<string, number> = {};
+      (actsRes.data || []).forEach((row: any) => {
+        const lid = row.lesson_id;
+        if (!lid || !lessonIdsOfMyGrade.has(lid) || !lessonIdsWithQuestions.has(lid)) return;
+        const subj = lessonSubjectMap[lid];
+        if (!subj) return;
+        counts[subj] = (counts[subj] || 0) + 1;
+      });
+      setPublishedCountBySubject(counts);
     } catch (e: any) {
       // Log detalhado: imprime mensagem, código e detalhes do erro Supabase
       console.error('Erro ao buscar provas e histórico:',
@@ -114,14 +150,42 @@ export const Home: React.FC = () => {
            </div>
         )}
 
+        {Object.values(publishedCountBySubject).reduce((a: number, b: number) => a + b, 0) === 0 && (
+          <div className="bg-white dark:bg-slate-900 rounded-[40px] border-2 border-dashed border-slate-200 dark:border-slate-800 p-10 text-center shadow-sm">
+            <Clock className="mx-auto text-slate-300 dark:text-slate-700 mb-4" size={40} />
+            <h3 className="font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight mb-1">Nenhuma atividade lançada ainda</h3>
+            <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+              Aguarde seu professor publicar atividades. Você será avisado aqui.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {(Object.keys(subjectsInfo) as Subject[]).map((key) => {
             const info = subjectsInfo[key];
+            const count = publishedCountBySubject[key] || 0;
+            const hasActivities = count > 0;
             return (
-              <Link key={key} to={`/grade/${student.grade}?subject=${key}`} className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl p-8 border border-slate-200 dark:border-slate-800 hover:-translate-y-2 transition-all group">
-                <div className={`w-16 h-16 ${info.color} rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-lg`}>{info.icon}</div>
+              <Link
+                key={key}
+                to={`/grade/${student.grade}?subject=${key}`}
+                className={`bg-white dark:bg-slate-900 rounded-3xl shadow-xl p-8 border transition-all group ${
+                  hasActivities
+                    ? 'border-slate-200 dark:border-slate-800 hover:-translate-y-2'
+                    : 'border-slate-100 dark:border-slate-800 opacity-60 hover:opacity-90'
+                }`}
+              >
+                <div className={`w-16 h-16 ${info.color} rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-lg ${!hasActivities && 'grayscale'}`}>{info.icon}</div>
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2 group-hover:text-tocantins-blue dark:group-hover:text-tocantins-yellow transition-colors">{info.name}</h3>
-                <div className="flex items-center text-tocantins-blue dark:text-tocantins-yellow font-bold text-xs uppercase tracking-widest mt-4">Acessar Conteúdo <ChevronRight size={14} className="ml-1" /></div>
+                {hasActivities ? (
+                  <div className="flex items-center text-tocantins-blue dark:text-tocantins-yellow font-bold text-xs uppercase tracking-widest mt-4">
+                    {count} {count === 1 ? 'atividade disponível' : 'atividades disponíveis'} <ChevronRight size={14} className="ml-1" />
+                  </div>
+                ) : (
+                  <div className="flex items-center text-slate-400 dark:text-slate-500 font-bold text-[10px] uppercase tracking-widest mt-4">
+                    Aguardando lançamento
+                  </div>
+                )}
               </Link>
             );
           })}

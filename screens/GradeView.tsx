@@ -63,15 +63,22 @@ export const GradeView: React.FC = () => {
         s.lesson_id || (s.lesson_title || '').trim()
       );
 
-      const [overridesRes, actsRes] = await Promise.all([
-        supabase.from('lesson_overrides').select('id'),
+      // Aluno só vê aulas onde o professor publicou atividade COM ao menos uma questão
+      const [actsRes, qsRes] = await Promise.all([
         supabase.from('activities').select('lesson_id'),
+        supabase.from('questions').select('lesson_id').eq('subject', subjectKey),
       ]);
 
+      const lessonIdsWithQuestions = new Set<string>();
+      (qsRes.data || []).forEach((row: any) => {
+        if (row.lesson_id) lessonIdsWithQuestions.add(row.lesson_id);
+      });
+
       const publishedIds = new Set<string>();
-      (overridesRes.data || []).forEach((row: any) => publishedIds.add(row.id));
       (actsRes.data || []).forEach((row: any) => {
-        if (row.lesson_id) publishedIds.add(row.lesson_id);
+        if (row.lesson_id && lessonIdsWithQuestions.has(row.lesson_id)) {
+          publishedIds.add(row.lesson_id);
+        }
       });
 
       setExams(filteredExams);
