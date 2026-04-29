@@ -165,6 +165,7 @@ create table if not exists public.questions (
   id uuid primary key default gen_random_uuid(),
   subject text,
   topic text,
+  lesson_id text,
   type text check (type in ('objective','discursive')),
   difficulty text check (difficulty in ('Fácil','Médio','Difícil')),
   question_text text not null,
@@ -173,6 +174,12 @@ create table if not exists public.questions (
   explanation text,
   created_at timestamptz not null default now()
 );
+
+-- Garantia: caso a tabela já existisse sem lesson_id (instalações antigas)
+alter table public.questions add column if not exists lesson_id text;
+create index if not exists questions_lesson_id_idx on public.questions(lesson_id);
+create index if not exists questions_subject_idx   on public.questions(subject);
+create index if not exists questions_topic_idx     on public.questions(topic);
 
 -- activity_submissions e activity_answers (já existem vazias, garante schema)
 create table if not exists public.activity_submissions (
