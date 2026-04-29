@@ -691,10 +691,28 @@ export const AdminDashboard: React.FC = () => {
     return Object.values(map).sort((a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [submissions, students, filterClass, filterGrade, filterSubject, lessonToBimesterMap]);
 
+  // Turmas disponíveis: filtra null/admin, e quando uma série está selecionada
+  // mostra apenas as turmas daquela série (ex.: filtro 1ª → só 13.xx).
   const classOptions = useMemo(() => {
-    const classes = new Set(students.map(s => s.school_class));
-    return Array.from(classes).sort();
-  }, [students]);
+    const classes = students
+      .filter(s => s.role !== 'admin')
+      .map(s => s.school_class)
+      .filter((c: any): c is string => Boolean(c) && c !== 'N/A');
+
+    const filtered = filterGrade === 'all'
+      ? classes
+      : classes.filter(c => c.charAt(0) === filterGrade);
+
+    return Array.from(new Set(filtered)).sort();
+  }, [students, filterGrade]);
+
+  // Quando o prof muda de série, se a turma atual não pertence à nova série,
+  // volta para "Todas".
+  useEffect(() => {
+    if (filterClass !== 'all' && filterGrade !== 'all' && filterClass.charAt(0) !== filterGrade) {
+      setFilterClass('all');
+    }
+  }, [filterGrade, filterClass]);
 
   const handleDownloadActivity = async (lesson: any) => {
     setLoading(true);
@@ -844,7 +862,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-4">
-                {['students', 'submissions', 'evaluations', 'question_bank'].includes(activeTab) && (
+                {['students', 'submissions', 'evaluations', 'question_bank', 'lessons_list'].includes(activeTab) && (
                   <>
                     <div className="relative group">
                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-tocantins-blue transition-colors" size={16}/>
@@ -901,7 +919,9 @@ export const AdminDashboard: React.FC = () => {
           {/* Conteúdo das Abas */}
           {activeTab === 'lessons_list' && (
             <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               {curriculumData.map((gradeData, gIdx) => (
+               {curriculumData
+                 .filter(gradeData => filterGrade === 'all' || String(gradeData.id) === filterGrade)
+                 .map((gradeData, gIdx) => (
                  <section key={gIdx} className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-8 shadow-sm">
                    <div className="flex items-center justify-between mb-8">
                      <div className="flex items-center gap-4">
