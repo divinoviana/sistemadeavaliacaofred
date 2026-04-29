@@ -16,43 +16,41 @@ import {
   Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, AlertTriangle, UserCircle, RotateCw
 } from 'lucide-react';
 
-// Componente otimizado para buscar a foto de cada aluno individualmente
-const StudentAvatar: React.FC<{ studentId?: string; studentName: string }> = ({ studentId, studentName }) => {
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+// Avatar do aluno. Prefere a foto vinda como prop (já carregada em fetchStudents).
+// Cai pra query individual só se a foto não foi fornecida (ex.: viewingSubmission).
+const StudentAvatar: React.FC<{ studentId?: string; studentName: string; photoUrl?: string | null }> = ({ studentId, studentName, photoUrl }) => {
+  const [photo, setPhoto] = useState<string | null>(photoUrl ?? null);
+  const [loading, setLoading] = useState(!photoUrl && !!studentId);
 
   useEffect(() => {
+    if (photoUrl) {
+      setPhoto(photoUrl);
+      setLoading(false);
+      return;
+    }
+    if (!studentId) {
+      setLoading(false);
+      return;
+    }
     let isCancelled = false;
-    const fetchPhoto = async () => {
-      if (!studentId) {
-          setLoading(false);
-          return;
-      }
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('students')
-          .select('photo_url')
-          .eq('id', studentId)
-          .maybeSingle();
-        if (!error && data?.photo_url && !isCancelled) {
-          setPhoto(data.photo_url);
-        }
-      } catch (err) {
-        console.error("Photo fetch error for student", studentId, err);
-      } finally {
-        if (!isCancelled) setLoading(false);
-      }
-    };
-    fetchPhoto();
+    setLoading(true);
+    supabase
+      .from('students')
+      .select('photo_url')
+      .eq('id', studentId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!isCancelled && !error && data?.photo_url) setPhoto(data.photo_url);
+      })
+      .then(() => { if (!isCancelled) setLoading(false); });
     return () => { isCancelled = true; };
-  }, [studentId]);
+  }, [studentId, photoUrl]);
 
   if (loading) return <div className="w-full h-full bg-slate-100 dark:bg-slate-800 animate-pulse" />;
   if (photo) return <img src={photo} alt={studentName} className="w-full h-full object-cover" />;
   return (
     <div className="w-full h-full bg-tocantins-blue/10 dark:bg-tocantins-yellow/10 flex items-center justify-center text-tocantins-blue dark:text-tocantins-yellow font-black text-xl">
-      {studentName.charAt(0)}
+      {studentName ? studentName.charAt(0) : '?'}
     </div>
   );
 };
@@ -643,55 +641,54 @@ export const AdminDashboard: React.FC = () => {
   }, []);
 
   const studentsWithSubmissions = useMemo(() => {
+    // 1) Lista base: TODOS os estudantes que passam nos filtros de turma/série
+    //    Cada um começa com 0 submissões — quem não enviou ainda também aparece.
     const map: Record<string, any> = {};
-    
-    // Filtramos as submissões primeiro usando os mesmos filtros da aba
-    const relevantSubmissions = submissions.filter(sub => {
-      const matchesSubject = filterSubject === 'all' || sub.subject === filterSubject;
-      
-      // Encontrar perfil do estudante para garantir filtros de turma/série
-      const studentProfile = students.find(s => 
-        (sub.student_id && s.id === sub.student_id) || 
-        (sub.student_name && s.name?.toLowerCase().trim() === sub.student_name.toLowerCase().trim())
-      );
-      const studentClass = sub.school_class || studentProfile?.school_class;
-      const studentGrade = String(sub.grade || studentProfile?.grade || studentClass?.charAt(0) || '');
-      
-      const matchesClass = filterClass === 'all' || studentClass === filterClass;
-      const matchesGrade = filterGrade === 'all' || studentGrade === filterGrade;
-      
-      return matchesSubject && matchesClass && matchesGrade;
-    });
+    students
+      .filter(st => st.role !== 'admin') // não mostra os 7 admins na grade de notas
+      .filter(st => {
+        const matchesClass = filterClass === 'all' || st.school_class === filterClass;
+        const studentGrade = String(st.grade || st.school_class?.charAt(0) || '');
+        const matchesGrade = filterGrade === 'all' || studentGrade === filterGrade;
+        return matchesClass && matchesGrade;
+      })
+      .forEach(st => {
+        map[st.id] = {
+          ...st,
+          submissionCount: 0,
+          bimesterGrades: { 1: 0, 2: 0, 3: 0, 4: 0 },
+          activities: [],
+        };
+      });
 
-    relevantSubmissions.forEach(sub => {
-      const studentProfile = students.find(s => 
-        (sub.student_id && s.id === sub.student_id) || 
-        (sub.student_name && s.name?.toLowerCase().trim() === sub.student_name.toLowerCase().trim())
-      );
-      if (studentProfile) {
-        if (!map[studentProfile.id]) {
-          map[studentProfile.id] = { 
-            ...studentProfile, 
-            submissionCount: 0,
-            bimesterGrades: { 1: 0, 2: 0, 3: 0, 4: 0 },
-            activities: []
-          };
+    // 2) Enriquecer com submissões (filtradas por matéria do professor)
+    submissions
+      .filter(sub => filterSubject === 'all' || sub.subject === filterSubject)
+      .forEach(sub => {
+        // Match prioritário por student_id; fallback por nome
+        let entry = sub.student_id ? map[sub.student_id] : null;
+        if (!entry && sub.student_name) {
+          const fallback = Object.values(map).find((s: any) =>
+            s.name?.toLowerCase().trim() === sub.student_name.toLowerCase().trim()
+          );
+          if (fallback) entry = fallback as any;
         }
-        map[studentProfile.id].submissionCount++;
-        
+        if (!entry) return;
+
+        entry.submissionCount += 1;
         const bimester = (sub.lesson_id ? lessonToBimesterMap[sub.lesson_id] : null) || lessonToBimesterMap[sub.lesson_title] || 1;
-        map[studentProfile.id].bimesterGrades[bimester] = (map[studentProfile.id].bimesterGrades[bimester] || 0) + (Number(sub.score) || 0);
-        map[studentProfile.id].activities.push({
+        entry.bimesterGrades[bimester] = (entry.bimesterGrades[bimester] || 0) + (Number(sub.score) || 0);
+        entry.activities.push({
           id: sub.lesson_id,
           title: sub.lesson_title,
+          subject: sub.subject,
           score: sub.score,
-          bimester: bimester,
-          date: sub.submitted_at
+          bimester,
+          date: sub.submitted_at || sub.submission_date,
         });
-      }
-    });
+      });
 
-    return Object.values(map).sort((a: any, b: any) => a.name.localeCompare(b.name));
+    return Object.values(map).sort((a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [submissions, students, filterClass, filterGrade, filterSubject, lessonToBimesterMap]);
 
   const classOptions = useMemo(() => {
@@ -1208,7 +1205,7 @@ export const AdminDashboard: React.FC = () => {
                         >
                            <div className="flex items-center gap-4">
                              <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md ring-4 ring-white dark:ring-slate-900">
-                                <StudentAvatar studentId={s.id} studentName={s.name} />
+                                <StudentAvatar studentId={s.id} studentName={s.name} photoUrl={s.photo_url} />
                              </div>
                              <div className="flex-1 min-w-0">
                                 <h4 className="font-black text-slate-800 dark:text-slate-100 truncate text-sm uppercase tracking-tight">{s.name}</h4>
@@ -1265,7 +1262,7 @@ export const AdminDashboard: React.FC = () => {
                    <div key={st.id} className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border dark:border-slate-800 shadow-sm group hover:shadow-xl transition-all">
                       <div className="flex flex-col items-center text-center">
                          <div className="w-20 h-20 rounded-3xl overflow-hidden mb-4 shadow-lg ring-4 ring-slate-50 dark:ring-slate-800 group-hover:scale-110 transition-transform">
-                            <StudentAvatar studentId={st.id} studentName={st.name} />
+                            <StudentAvatar studentId={st.id} studentName={st.name} photoUrl={st.photo_url} />
                          </div>
                          <h4 className="font-black text-slate-800 dark:text-white uppercase tracking-tighter text-sm mb-1">{st.name}</h4>
                          <span className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest">{st.grade}ª Série • {st.school_class}</span>
@@ -1751,7 +1748,7 @@ export const AdminDashboard: React.FC = () => {
               <div className="p-8 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
                  <div className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-tocantins-blue rounded-2xl flex items-center justify-center text-white shadow-lg overflow-hidden ring-4 ring-white dark:ring-slate-900">
-                       <StudentAvatar studentId={selectedStudentEval.id} studentName={selectedStudentEval.name} />
+                       <StudentAvatar studentId={selectedStudentEval.id} studentName={selectedStudentEval.name} photoUrl={selectedStudentEval.photo_url} />
                     </div>
                     <div>
                        <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tighter text-xl">{selectedStudentEval.name}</h3>
@@ -1778,15 +1775,21 @@ export const AdminDashboard: React.FC = () => {
                  <div className="space-y-4">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Histórico de Atividades</h4>
                     <div className="space-y-3">
-                       {selectedStudentEval.activities.sort((a:any, b:any) => (b.date?.seconds || 0) - (a.date?.seconds || 0)).map((act: any, idx: number) => (
+                       {[...selectedStudentEval.activities]
+                         .sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+                         .map((act: any, idx: number) => (
                          <div key={idx} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border dark:border-slate-700 flex justify-between items-center group hover:border-tocantins-blue/30 transition-all">
                             <div className="flex-1">
                                <p className="font-bold text-slate-700 dark:text-slate-100 text-sm leading-tight">{act.title}</p>
-                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{act.bimester}º Bimestre</span>
+                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                 {act.bimester}º Bimestre
+                                 {act.subject && ` • ${act.subject}`}
+                                 {act.date && ` • ${new Date(act.date).toLocaleDateString('pt-BR')}`}
+                               </span>
                             </div>
                             <div className="text-right">
                                <div className="inline-flex items-center px-3 py-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-xs font-black text-tocantins-blue dark:text-tocantins-yellow">
-                                 {act.score?.toFixed(1) || '0.0'}
+                                 {Number(act.score || 0).toFixed(1)}
                                </div>
                             </div>
                          </div>
