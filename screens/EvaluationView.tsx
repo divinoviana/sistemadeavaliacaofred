@@ -74,41 +74,136 @@ export const EvaluationView: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (Object.keys(answers).length < exam.questions.length) {
-      alert("Por favor, responda todas as questões antes de finalizar.");
+    // Conta quantas questões devem ter resposta (todas as do exam)
+    const totalQuestions = exam.questions.length;
+    const answeredCount = exam.questions.filter((q: any) => {
+      const v = answers[q.id];
+      return v !== undefined && v !== null && String(v).trim() !== '';
+    }).length;
+
+    if (answeredCount < totalQuestions) {
+      alert(`Responda todas as ${totalQuestions} questões antes de finalizar. (${answeredCount}/${totalQuestions})`);
       return;
     }
 
     if (!confirm("Tem certeza que deseja enviar? Você só tem UMA tentativa para esta avaliação.")) return;
 
     setIsSubmitting(true);
-    
-    let correctCount = 0;
-    exam.questions.forEach((q: any) => {
-      if (answers[q.id]?.toLowerCase() === q.correctOption.toLowerCase()) {
-        correctCount++;
-      }
+
+    // 1) Corrige OBJETIVAS localmente (precisão 100%)
+    const objectiveQs = exam.questions.filter((q: any) => q.type !== 'discursive' && q.options && q.correctOption);
+    const discursiveQs = exam.questions.filter((q: any) => q.type === 'discursive' || !q.options || !q.correctOption);
+
+    let objectiveCorrect = 0;
+    const correctionDetails: any[] = [];
+
+    objectiveQs.forEach((q: any) => {
+      const studentLetter = String(answers[q.id] || '').toLowerCase();
+      const correctLetter = String(q.correctOption || '').toLowerCase();
+      const isCorrect = studentLetter === correctLetter;
+      if (isCorrect) objectiveCorrect++;
+      correctionDetails.push({
+        questionId: q.id,
+        type: 'objective',
+        question: q.questionText,
+        studentAnswer: `Opção ${studentLetter.toUpperCase()}: ${q.options?.[studentLetter] || ''}`,
+        correctAnswer: `Opção ${correctLetter.toUpperCase()}: ${q.options?.[correctLetter] || ''}`,
+        isCorrect,
+        score: isCorrect ? 10 : 0,
+        feedback: isCorrect ? 'Correto.' : `A alternativa correta era ${correctLetter.toUpperCase()}.`,
+      });
     });
 
-    const finalScore = (correctCount / exam.questions.length) * 10;
+    // 2) Corrige DISCURSIVAS via IA (com fallback se IA cair)
+    let aiGeneralComment: string | null = null;
+    let discursiveTotalScore = 0;
+    if (discursiveQs.length > 0) {
+      try {
+        const { evaluateActivities } = await import('../services/aiService');
+        const aiInput = discursiveQs.map((q: any) => ({
+          question: q.questionText,
+          answer: String(answers[q.id] || ''),
+          // sem correctAnswer → força a IA a avaliar densidade conceitual
+        }));
+        const aiRes = await evaluateActivities(
+          `${exam.title || 'Simulado Bimestral'} (${exam.bimester}º Bimestre)`,
+          (exam.topics || []).join(', '),
+          aiInput
+        );
+        aiGeneralComment = aiRes.generalComment;
+        aiRes.corrections.forEach((c, i) => {
+          const q = discursiveQs[i];
+          discursiveTotalScore += Number(c.score) || 0;
+          correctionDetails.push({
+            questionId: q?.id,
+            type: 'discursive',
+            question: c.question,
+            studentAnswer: c.studentAnswer,
+            isCorrect: c.isCorrect,
+            score: c.score,
+            feedback: c.feedback,
+          });
+        });
+      } catch (e) {
+        console.warn('IA falhou nas discursivas; aplicando fallback:', e);
+        discursiveQs.forEach((q: any) => {
+          const ans = String(answers[q.id] || '').trim();
+          const score = ans.length >= 30 ? 6 : 0;
+          discursiveTotalScore += score;
+          correctionDetails.push({
+            questionId: q.id,
+            type: 'discursive',
+            question: q.questionText,
+            studentAnswer: ans || '(não respondida)',
+            isCorrect: score >= 6,
+            score,
+            feedback: score >= 6
+              ? 'Resposta registrada. Aguardando avaliação detalhada do professor.'
+              : 'Resposta muito breve ou ausente. O professor irá revisar.',
+          });
+        });
+      }
+    }
+
+    // 3) Calcula nota final 0–10 considerando objetivas + discursivas
+    const objectiveScoreAvg = objectiveQs.length > 0 ? (objectiveCorrect / objectiveQs.length) * 10 : 0;
+    const discursiveScoreAvg = discursiveQs.length > 0 ? (discursiveTotalScore / discursiveQs.length) : 0;
+
+    let finalScore: number;
+    if (objectiveQs.length > 0 && discursiveQs.length > 0) {
+      // Peso proporcional ao número de questões de cada tipo
+      const totalQ = objectiveQs.length + discursiveQs.length;
+      finalScore = (objectiveScoreAvg * objectiveQs.length + discursiveScoreAvg * discursiveQs.length) / totalQ;
+    } else if (objectiveQs.length > 0) {
+      finalScore = objectiveScoreAvg;
+    } else {
+      finalScore = discursiveScoreAvg;
+    }
+    finalScore = Math.round(finalScore * 10) / 10; // 1 casa decimal
     setScore(finalScore);
+
+    const generalComment = aiGeneralComment ||
+      `Simulado finalizado. Objetivas: ${objectiveCorrect}/${objectiveQs.length} acertos. Discursivas: nota média ${discursiveScoreAvg.toFixed(1)}.`;
 
     try {
       const nowIso = new Date().toISOString();
+      const examTitle = exam.title || `Avaliação Bimestral: ${exam.bimester}º Bimestre`;
       const { error } = await supabase.from('submissions').insert({
         student_id: student.id,
         student_name: student.name.trim(),
         school_class: student.school_class.trim(),
         grade: student.grade,
         lesson_id: examId,
-        lesson_title: `Avaliação Bimestral: ${exam.bimester}º Bimestre`.trim(),
+        lesson_title: examTitle.trim(),
         subject: exam.subject,
         score: finalScore,
-        content: exam.questions.map((q: any) => ({
-          question: q.questionText,
-          answer: `Opção ${answers[q.id].toUpperCase()}`,
+        content: correctionDetails.map(c => ({
+          question: c.question,
+          answer: c.studentAnswer,
+          correctAnswer: c.correctAnswer,
         })),
-        teacher_feedback: `Simulado automático finalizado. Acertos: ${correctCount}/${exam.questions.length}.`,
+        ai_feedback: { generalComment, corrections: correctionDetails },
+        teacher_feedback: null,
         submitted_at: nowIso,
         submission_date: nowIso,
         status: 'completed',
@@ -173,39 +268,61 @@ export const EvaluationView: React.FC = () => {
                  </div>
               )}
 
-              {exam.questions && Array.isArray(exam.questions) && exam.questions.map((q: any, idx: number) => (
+              {exam.questions && Array.isArray(exam.questions) && exam.questions.map((q: any, idx: number) => {
+                const isDiscursive = q.type === 'discursive' || !q.options || !q.correctOption;
+                return (
                  <div key={idx} className="bg-white dark:bg-slate-900 rounded-[40px] shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden transition-colors duration-300">
                     <div className="p-8 border-b dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 flex items-center justify-between">
                        <span className="bg-slate-900 dark:bg-slate-950 text-white w-10 h-10 rounded-xl flex items-center justify-center font-black">
                           {idx + 1}
                        </span>
-                       <span className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-widest">ENEM Style</span>
+                       <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${isDiscursive ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'}`}>
+                         {isDiscursive ? 'Discursiva' : 'Objetiva (A–E)'}
+                       </span>
                     </div>
                     <div className="p-8 space-y-6">
-                       <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-3xl border-l-4 border-indigo-400 italic text-sm text-slate-600 dark:text-slate-400 leading-relaxed shadow-inner">
-                          "{q.textFragment}"
-                       </div>
+                       {q.textFragment && q.textFragment.trim() && (
+                         <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-3xl border-l-4 border-indigo-400 italic text-sm text-slate-600 dark:text-slate-400 leading-relaxed shadow-inner">
+                            "{q.textFragment}"
+                         </div>
+                       )}
                        <p className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-tight">{q.questionText}</p>
-                       
-                       <div className="space-y-3">
-                          {['a', 'b', 'c', 'd', 'e'].map(key => q.options[key as keyof typeof q.options] && (
-                             <button 
-                               key={key} 
-                               onClick={() => handleOptionSelect(q.id, key)}
-                               className={`w-full text-left p-5 rounded-2xl border-2 transition-all flex items-start gap-4 ${answers[q.id] === key ? 'border-tocantins-blue dark:border-tocantins-yellow bg-blue-50 dark:bg-blue-900/20 shadow-md ring-2 ring-blue-100 dark:ring-blue-900/40' : 'border-slate-50 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 hover:border-slate-200 dark:hover:border-slate-600'}`}
-                             >
-                                <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 font-black uppercase text-xs ${answers[q.id] === key ? 'bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950' : 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border dark:border-slate-700'}`}>
-                                   {key}
-                                </span>
-                                <span className={`text-sm leading-relaxed ${answers[q.id] === key ? 'text-blue-900 dark:text-blue-100 font-bold' : 'text-slate-600 dark:text-slate-400 font-medium'}`}>
-                                   {q.options[key as keyof typeof q.options] as string}
-                                </span>
-                             </button>
-                          ))}
-                       </div>
+
+                       {!isDiscursive ? (
+                         <div className="space-y-3">
+                            {['a', 'b', 'c', 'd', 'e'].map(key => q.options[key as keyof typeof q.options] && (
+                               <button
+                                 key={key}
+                                 onClick={() => handleOptionSelect(q.id, key)}
+                                 className={`w-full text-left p-5 rounded-2xl border-2 transition-all flex items-start gap-4 ${answers[q.id] === key ? 'border-tocantins-blue dark:border-tocantins-yellow bg-blue-50 dark:bg-blue-900/20 shadow-md ring-2 ring-blue-100 dark:ring-blue-900/40' : 'border-slate-50 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 hover:border-slate-200 dark:hover:border-slate-600'}`}
+                               >
+                                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 font-black uppercase text-xs ${answers[q.id] === key ? 'bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950' : 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border dark:border-slate-700'}`}>
+                                     {key}
+                                  </span>
+                                  <span className={`text-sm leading-relaxed ${answers[q.id] === key ? 'text-blue-900 dark:text-blue-100 font-bold' : 'text-slate-600 dark:text-slate-400 font-medium'}`}>
+                                     {q.options[key as keyof typeof q.options] as string}
+                                  </span>
+                               </button>
+                            ))}
+                         </div>
+                       ) : (
+                         <div>
+                           <textarea
+                             value={String(answers[q.id] || '')}
+                             onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                             placeholder="Digite sua resposta argumentativa aqui (mínimo 30 caracteres)..."
+                             rows={6}
+                             className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-2xl p-5 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-tocantins-blue dark:focus:border-tocantins-yellow focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10 leading-relaxed"
+                           />
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2 ml-2">
+                             {String(answers[q.id] || '').length} caracteres • Avaliada por IA + revisão do professor
+                           </p>
+                         </div>
+                       )}
                     </div>
                  </div>
-              ))}
+               );
+              })}
 
               <button 
                 onClick={handleSubmit} 

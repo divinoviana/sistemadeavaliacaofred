@@ -111,9 +111,20 @@ export const AdminDashboard: React.FC = () => {
   const [examBimester, setExamBimester] = useState('1');
   const [examClass, setExamClass] = useState('all');
   const [examTopics, setExamTopics] = useState('');
+  const [examTitle, setExamTitle] = useState('');
+  const [examQuestionsDraft, setExamQuestionsDraft] = useState<any[]>([]);
+  const [examNewQuestion, setExamNewQuestion] = useState<any>({
+    type: 'objective',
+    textFragment: '',
+    questionText: '',
+    options: { a: '', b: '', c: '', d: '', e: '' },
+    correctOption: 'a',
+    difficulty: 'Médio',
+    explanation: '',
+  });
   const [isGeneratingExam, setIsGeneratingExam] = useState(false);
-  const [generatedExam, setGeneratedExam] = useState<any | null>(null);
   const [isPublishingExam, setIsPublishingExam] = useState(false);
+  const [publishedExams, setPublishedExams] = useState<any[]>([]);
   
   const [reportTarget, setReportTarget] = useState<'student' | 'class'>('student');
   const [selectedReportStudent, setSelectedReportStudent] = useState('');
@@ -143,6 +154,7 @@ export const AdminDashboard: React.FC = () => {
       fetchStudents();
       fetchSubmissions();
       fetchChatSessions();
+      fetchPublishedExams();
     }
   }, [teacherSubject, isSuper, isAuthLoading]);
 
@@ -517,42 +529,130 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  // Lista todos os simulados já publicados (filtrados por matéria do prof)
+  const fetchPublishedExams = async () => {
+    try {
+      let qb = supabase.from('bimonthly_exams').select('*').order('created_at', { ascending: false });
+      if (!isSuper && teacherSubject) qb = qb.eq('subject', teacherSubject);
+      const { data, error } = await qb;
+      if (error) throw error;
+      setPublishedExams(data || []);
+    } catch (e) {
+      console.error('Erro ao buscar simulados:', e);
+    }
+  };
+
+  // Adiciona a questão atual ao rascunho do simulado
+  const handleAddExamQuestion = () => {
+    if (!examNewQuestion.questionText.trim()) {
+      alert('Preencha o enunciado da questão.');
+      return;
+    }
+    if (examNewQuestion.type === 'objective') {
+      const opts = examNewQuestion.options || {};
+      const filled = ['a','b','c','d','e'].filter(k => (opts[k] || '').trim()).length;
+      if (filled < 2) { alert('Preencha pelo menos 2 alternativas.'); return; }
+      if (!opts[examNewQuestion.correctOption]?.trim()) {
+        alert('A alternativa correta marcada não foi preenchida.');
+        return;
+      }
+    }
+    const next = {
+      ...examNewQuestion,
+      id: examQuestionsDraft.length + 1,
+    };
+    setExamQuestionsDraft([...examQuestionsDraft, next]);
+    setExamNewQuestion({
+      type: examNewQuestion.type,
+      textFragment: '',
+      questionText: '',
+      options: { a: '', b: '', c: '', d: '', e: '' },
+      correctOption: 'a',
+      difficulty: 'Médio',
+      explanation: '',
+    });
+  };
+
+  const handleRemoveExamQuestion = (idx: number) => {
+    if (!confirm('Remover esta questão do simulado?')) return;
+    const next = examQuestionsDraft.filter((_, i) => i !== idx).map((q, i) => ({ ...q, id: i + 1 }));
+    setExamQuestionsDraft(next);
+  };
+
+  // Assistente IA opcional: usa a IA para SUGERIR questões e popular o draft
   const handleGenerateExam = async () => {
+    if (!examTopics.trim()) { alert('Liste os tópicos do bimestre antes de pedir sugestão à IA.'); return; }
     setIsGeneratingExam(true);
     try {
       const { generateBimonthlyEvaluation } = await import('../services/aiService');
       const exam = await generateBimonthlyEvaluation(
-        teacherSubject || 'Geral', 
-        examGrade, 
+        teacherSubject || 'Geral',
+        examGrade,
         examBimester,
         examTopics.split(',').map(t => t.trim()).filter(Boolean)
       );
-      setGeneratedExam(exam);
+      // Converte para o formato do draft (mantendo os flags type)
+      const suggested = (exam.questions || []).map((q: any, i: number) => ({
+        id: examQuestionsDraft.length + i + 1,
+        type: 'objective',
+        textFragment: q.textFragment || '',
+        questionText: q.questionText || q.question_text || '',
+        options: q.options || { a: '', b: '', c: '', d: '', e: '' },
+        correctOption: (q.correctOption || q.correct_option || 'a').toLowerCase(),
+        difficulty: q.difficulty || 'Médio',
+        explanation: q.explanation || '',
+      }));
+      setExamQuestionsDraft([...examQuestionsDraft, ...suggested]);
+      if (!examTitle && exam.subject) setExamTitle(`Simulado de ${exam.subject} - ${examBimester}º Bimestre`);
     } catch (e: any) {
-      alert("Erro ao gerar prova: " + e.message);
+      alert('Erro ao sugerir questões: ' + e.message);
     } finally {
       setIsGeneratingExam(false);
     }
   };
 
+  // Publica o simulado: salva em bimonthly_exams para os alunos verem
   const handlePublishExam = async () => {
-    if (!generatedExam || isPublishingExam) return;
+    if (isPublishingExam) return;
+    if (examQuestionsDraft.length === 0) {
+      alert('Adicione pelo menos uma questão antes de publicar.');
+      return;
+    }
+    if (!confirm(`Publicar este simulado? ${examQuestionsDraft.length} questões serão liberadas para os alunos.`)) return;
     setIsPublishingExam(true);
     try {
-      const { error } = await supabase.from('bimonthly_exams').insert({
-        ...generatedExam,
+      const payload = {
         subject: teacherSubject || 'Geral',
         grade: String(examGrade),
         bimester: String(examBimester),
+        title: examTitle.trim() || `Simulado - ${examBimester}º Bimestre`,
         school_class: examClass === 'all' ? null : examClass,
-      });
+        topics: examTopics.split(',').map(t => t.trim()).filter(Boolean),
+        questions: examQuestionsDraft,
+      };
+      const { error } = await supabase.from('bimonthly_exams').insert(payload);
       if (error) throw error;
-      alert("Prova publicada para os alunos!");
-      setGeneratedExam(null);
+      alert('Simulado publicado com sucesso! Os alunos já podem realizá-lo.');
+      // Reset
+      setExamQuestionsDraft([]);
+      setExamTitle('');
+      setExamTopics('');
+      fetchPublishedExams();
     } catch (e: any) {
-      alert("Erro ao publicar: " + e.message);
+      alert('Erro ao publicar: ' + e.message);
     } finally {
       setIsPublishingExam(false);
+    }
+  };
+
+  const handleDeletePublishedExam = async (examId: string) => {
+    if (!confirm('Excluir este simulado? Submissões já realizadas pelos alunos NÃO serão apagadas.')) return;
+    try {
+      const { error } = await supabase.from('bimonthly_exams').delete().eq('id', examId);
+      if (error) throw error;
+      fetchPublishedExams();
+    } catch (e: any) {
+      alert('Erro ao excluir: ' + e.message);
     }
   };
 
@@ -700,6 +800,13 @@ export const AdminDashboard: React.FC = () => {
         };
       });
 
+    // Extrai número do bimestre a partir do título do simulado/aula
+    const bimesterFromTitle = (title?: string) => {
+      if (!title) return null;
+      const m = String(title).match(/(\d)\s*º\s*bimestre/i);
+      return m ? Number(m[1]) : null;
+    };
+
     // 2) Enriquecer com submissões (filtradas por matéria do professor)
     submissions
       .filter(sub => filterSubject === 'all' || sub.subject === filterSubject)
@@ -715,7 +822,12 @@ export const AdminDashboard: React.FC = () => {
         if (!entry) return;
 
         entry.submissionCount += 1;
-        const bimester = (sub.lesson_id ? lessonToBimesterMap[sub.lesson_id] : null) || lessonToBimesterMap[sub.lesson_title] || 1;
+        // Bimester: tenta lesson_id curricular → título → "Xº Bimestre" no título
+        const bimester =
+          (sub.lesson_id ? lessonToBimesterMap[sub.lesson_id] : null) ||
+          lessonToBimesterMap[sub.lesson_title] ||
+          bimesterFromTitle(sub.lesson_title) ||
+          1;
         entry.bimesterGrades[bimester] = (entry.bimesterGrades[bimester] || 0) + (Number(sub.score) || 0);
         entry.activities.push({
           id: sub.lesson_id,
@@ -723,6 +835,7 @@ export const AdminDashboard: React.FC = () => {
           subject: sub.subject,
           score: sub.score,
           bimester,
+          isExam: String(sub.lesson_title || '').toLowerCase().includes('avaliação bimestral') || String(sub.lesson_title || '').toLowerCase().includes('simulado'),
           date: sub.submitted_at || sub.submission_date,
         });
       });
@@ -1446,104 +1559,226 @@ export const AdminDashboard: React.FC = () => {
           )}
 
           {activeTab === 'exam_generator' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-10 shadow-sm text-center max-w-2xl mx-auto">
-                   <div className="w-20 h-20 bg-tocantins-blue/10 dark:bg-tocantins-yellow/10 rounded-[32px] flex items-center justify-center text-tocantins-blue dark:text-tocantins-yellow mx-auto mb-8 shadow-inner">
-                      <BrainCircuit size={40}/>
-                   </div>
-                   <h2 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter mb-4">Gerador de Simulados IA</h2>
-                   <p className="text-slate-400 dark:text-slate-500 font-bold text-sm leading-relaxed mb-10">
-                     Utilize a Inteligência Artificial para compor avaliações bimestrais completas baseadas no currículo oficial de Ciências Humanas.
-                   </p>
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">
+              {/* MÓDULO 1: META + IA opcional */}
+              <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-8 shadow-sm">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="w-12 h-12 bg-tocantins-blue/10 dark:bg-tocantins-yellow/10 rounded-2xl flex items-center justify-center text-tocantins-blue dark:text-tocantins-yellow shadow-inner">
+                    <ClipboardEdit size={24}/>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Compor Simulado Bimestral</h2>
+                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Crie manualmente as questões. Ao publicar, vira avaliação para os alunos.</p>
+                  </div>
+                </div>
 
-                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                      <div className="space-y-2 text-left">
-                         <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Série</label>
-                         <select 
-                           value={examGrade}
-                           onChange={e => setExamGrade(e.target.value)}
-                           className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none transition-all focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
-                         >
-                            <option value="1">1ª Série</option>
-                            <option value="2">2ª Série</option>
-                            <option value="3">3ª Série</option>
-                         </select>
-                      </div>
-                      <div className="space-y-2 text-left">
-                         <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Bimestre</label>
-                         <select 
-                           value={examBimester}
-                           onChange={e => setExamBimester(e.target.value)}
-                           className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none transition-all focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
-                         >
-                            <option value="1">1º Bimestre</option>
-                            <option value="2">2º Bimestre</option>
-                            <option value="3">3º Bimestre</option>
-                            <option value="4">4º Bimestre</option>
-                         </select>
-                      </div>
-                      <div className="space-y-2 text-left">
-                         <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Turma Alvo</label>
-                         <select 
-                           value={examClass}
-                           onChange={e => setExamClass(e.target.value)}
-                           className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none transition-all focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
-                         >
-                            <option value="all">Todas as Turmas</option>
-                            {classOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                         </select>
-                      </div>
-                   </div>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Título do simulado (ex.: Simulado: Indivíduo e Sociedade)"
+                    value={examTitle}
+                    onChange={e => setExamTitle(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Tópicos do bimestre (separados por vírgula)"
+                    value={examTopics}
+                    onChange={e => setExamTopics(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <select value={examGrade} onChange={e => setExamGrade(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
+                      <option value="1">1ª Série</option><option value="2">2ª Série</option><option value="3">3ª Série</option>
+                    </select>
+                    <select value={examBimester} onChange={e => setExamBimester(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
+                      <option value="1">1º Bimestre</option><option value="2">2º Bimestre</option><option value="3">3º Bimestre</option><option value="4">4º Bimestre</option>
+                    </select>
+                    <select value={examClass} onChange={e => setExamClass(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
+                      <option value="all">Todas as Turmas</option>
+                      {classOptions.map(c => <option key={c} value={c}>Turma {c}</option>)}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleGenerateExam}
+                    disabled={isGeneratingExam}
+                    className="w-full bg-tocantins-blue/10 dark:bg-tocantins-yellow/10 text-tocantins-blue dark:text-tocantins-yellow py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-tocantins-blue/20 dark:hover:bg-tocantins-yellow/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isGeneratingExam ? <Loader2 className="animate-spin" size={14}/> : <Sparkles size={14}/>}
+                    {isGeneratingExam ? 'Pedindo sugestão à IA...' : 'Sugerir questões com IA (opcional, baseado nos tópicos)'}
+                  </button>
+                </div>
+              </div>
 
-                   <button 
-                     onClick={handleGenerateExam}
-                     disabled={isGeneratingExam}
-                     className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-950 py-5 rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
-                   >
-                     {isGeneratingExam ? <Loader2 className="animate-spin" size={20}/> : <Sparkles size={20}/>}
-                     {isGeneratingExam ? 'Interpretando Currículo...' : 'Compor Prova Agora'}
-                   </button>
-               </div>
+              {/* MÓDULO 2: Editor de questão */}
+              <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-8 shadow-sm">
+                <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-tight mb-6 flex items-center gap-2">
+                  <Pencil size={16}/> Adicionar Questão
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    {(['objective','discursive'] as const).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setExamNewQuestion({...examNewQuestion, type: t})}
+                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${examNewQuestion.type === t ? 'bg-tocantins-blue text-white border-tocantins-blue' : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700'}`}
+                      >
+                        {t === 'objective' ? 'Objetiva (A-E)' : 'Discursiva'}
+                      </button>
+                    ))}
+                  </div>
 
-               {generatedExam && (
-                 <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-10 shadow-sm animate-in zoom-in duration-500">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 border-b dark:border-slate-800 pb-8">
-                       <div>
-                          <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter mb-2">Simulado Gerado com Sucesso</h3>
-                          <p className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest leading-none flex items-center gap-2">
-                             <CheckCircle2 className="text-emerald-500" size={14}/> Pronto para publicação e download
-                          </p>
-                       </div>
-                       <div className="flex gap-3">
-                          <button 
-                            onClick={handlePublishExam}
-                            disabled={isPublishingExam}
-                            className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  <textarea
+                    placeholder="Texto-base / fragmento (opcional)"
+                    rows={3}
+                    value={examNewQuestion.textFragment}
+                    onChange={e => setExamNewQuestion({...examNewQuestion, textFragment: e.target.value})}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm text-slate-700 dark:text-slate-200 outline-none italic"
+                  />
+
+                  <textarea
+                    placeholder="Enunciado da questão"
+                    rows={3}
+                    value={examNewQuestion.questionText}
+                    onChange={e => setExamNewQuestion({...examNewQuestion, questionText: e.target.value})}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none"
+                  />
+
+                  {examNewQuestion.type === 'objective' && (
+                    <div className="space-y-2">
+                      {(['a','b','c','d','e'] as const).map(letter => (
+                        <div key={letter} className="flex gap-2 items-center">
+                          <button
+                            onClick={() => setExamNewQuestion({...examNewQuestion, correctOption: letter})}
+                            className={`w-10 h-10 rounded-xl font-black text-xs uppercase shrink-0 transition-all ${examNewQuestion.correctOption === letter ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}
+                            title="Marcar como correta"
                           >
-                             {isPublishingExam ? <Loader2 className="animate-spin" size={14}/> : <Send size={14}/>}
-                             Liberar para Alunos
+                            {letter}
                           </button>
-                       </div>
+                          <input
+                            type="text"
+                            placeholder={`Alternativa ${letter.toUpperCase()}`}
+                            value={examNewQuestion.options[letter]}
+                            onChange={e => setExamNewQuestion({...examNewQuestion, options: {...examNewQuestion.options, [letter]: e.target.value}})}
+                            className="flex-1 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-700 dark:text-slate-200 outline-none"
+                          />
+                        </div>
+                      ))}
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Clique na letra para marcar a resposta correta</p>
                     </div>
+                  )}
 
-                    <div className="space-y-10">
-                       {generatedExam.questions?.map((q: any, idx: number) => (
-                         <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 p-8 rounded-[32px] border border-slate-100 dark:border-slate-800">
-                            <span className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border dark:border-slate-800 mb-6 inline-block">Questão {idx + 1}</span>
-                            <p className="text-slate-700 dark:text-slate-200 font-bold leading-relaxed mb-8">{q.question_text}</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                               {Object.entries(q.options).map(([key, val]: [string, any]) => (
-                                 <div key={key} className={`p-4 rounded-2xl border flex items-center gap-3 text-xs font-bold ${key === q.correct_option ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-500 shadow-sm text-emerald-600 dark:text-emerald-400' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-500'}`}>
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black ${key === q.correct_option ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 uppercase'}`}>{key}</div>
-                                    {val}
-                                 </div>
-                               ))}
-                            </div>
-                         </div>
-                       ))}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <select
+                      value={examNewQuestion.difficulty}
+                      onChange={e => setExamNewQuestion({...examNewQuestion, difficulty: e.target.value})}
+                      className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none"
+                    >
+                      <option value="Fácil">Dificuldade: Fácil</option>
+                      <option value="Médio">Dificuldade: Médio</option>
+                      <option value="Difícil">Dificuldade: Difícil</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Comentário pedagógico (opcional)"
+                      value={examNewQuestion.explanation}
+                      onChange={e => setExamNewQuestion({...examNewQuestion, explanation: e.target.value})}
+                      className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm text-slate-700 dark:text-slate-200 outline-none"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleAddExamQuestion}
+                    className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-950 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 size={14}/> Adicionar ao Simulado
+                  </button>
+                </div>
+              </div>
+
+              {/* MÓDULO 3: Lista de questões no rascunho */}
+              {examQuestionsDraft.length > 0 && (
+                <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-8 shadow-sm">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-tight">Questões do Simulado</h3>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{examQuestionsDraft.length} questões adicionadas</p>
                     </div>
-                 </div>
-               )}
+                    <button
+                      onClick={handlePublishExam}
+                      disabled={isPublishingExam}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isPublishingExam ? <Loader2 className="animate-spin" size={14}/> : <Send size={14}/>}
+                      Publicar para Alunos
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {examQuestionsDraft.map((q, idx) => (
+                      <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex gap-4 items-start">
+                        <span className="bg-tocantins-blue text-white w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0">{idx + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest ${q.type === 'objective' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
+                              {q.type === 'objective' ? 'OBJETIVA' : 'DISCURSIVA'}
+                            </span>
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{q.difficulty}</span>
+                          </div>
+                          {q.textFragment && <p className="text-xs italic text-slate-500 mb-2 line-clamp-2">"{q.textFragment}"</p>}
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-200 leading-tight">{q.questionText}</p>
+                          {q.type === 'objective' && (
+                            <p className="text-[10px] font-black text-emerald-500 mt-2 uppercase tracking-widest">Resposta: opção {q.correctOption?.toUpperCase()}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleRemoveExamQuestion(idx)}
+                          className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                          title="Remover"
+                        >
+                          <Trash2 size={16}/>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* MÓDULO 4: Simulados publicados */}
+              {publishedExams.length > 0 && (
+                <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-8 shadow-sm">
+                  <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-tight mb-6 flex items-center gap-2">
+                    <Library size={16}/> Simulados Publicados ({publishedExams.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {publishedExams.map((exam: any) => (
+                      <div key={exam.id} className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md ${subjectsInfo[exam.subject as Subject]?.color || 'bg-slate-500'}`}>
+                            <Award size={20}/>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
+                              {exam.title || `Simulado ${subjectsInfo[exam.subject as Subject]?.name || exam.subject}`}
+                            </p>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                              {exam.bimester}º Bimestre • {exam.grade}ª Série • {exam.school_class || 'Todas as turmas'} • {(exam.questions?.length || 0)} questões
+                              {exam.created_at && ` • ${new Date(exam.created_at).toLocaleDateString('pt-BR')}`}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDeletePublishedExam(exam.id)}
+                          className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                          title="Excluir simulado"
+                        >
+                          <Trash2 size={16}/>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1837,17 +2072,24 @@ export const AdminDashboard: React.FC = () => {
                        {[...selectedStudentEval.activities]
                          .sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
                          .map((act: any, idx: number) => (
-                         <div key={idx} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border dark:border-slate-700 flex justify-between items-center group hover:border-tocantins-blue/30 transition-all">
-                            <div className="flex-1">
-                               <p className="font-bold text-slate-700 dark:text-slate-100 text-sm leading-tight">{act.title}</p>
-                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                 {act.bimester}º Bimestre
-                                 {act.subject && ` • ${act.subject}`}
-                                 {act.date && ` • ${new Date(act.date).toLocaleDateString('pt-BR')}`}
-                               </span>
+                         <div key={idx} className={`p-4 rounded-2xl border flex justify-between items-center group transition-all ${act.isExam ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/30 hover:border-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-tocantins-blue/30'}`}>
+                            <div className="flex-1 flex items-center gap-3">
+                               {act.isExam && (
+                                 <span className="px-2 py-1 bg-amber-500 text-white rounded text-[8px] font-black uppercase tracking-widest shrink-0">
+                                   Simulado
+                                 </span>
+                               )}
+                               <div className="min-w-0">
+                                 <p className="font-bold text-slate-700 dark:text-slate-100 text-sm leading-tight truncate">{act.title}</p>
+                                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                   {act.bimester}º Bimestre
+                                   {act.subject && ` • ${act.subject}`}
+                                   {act.date && ` • ${new Date(act.date).toLocaleDateString('pt-BR')}`}
+                                 </span>
+                               </div>
                             </div>
-                            <div className="text-right">
-                               <div className="inline-flex items-center px-3 py-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-xs font-black text-tocantins-blue dark:text-tocantins-yellow">
+                            <div className="text-right shrink-0 ml-3">
+                               <div className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-black ${act.isExam ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-blue-50 dark:bg-blue-900/20 text-tocantins-blue dark:text-tocantins-yellow'}`}>
                                  {Number(act.score || 0).toFixed(1)}
                                </div>
                             </div>

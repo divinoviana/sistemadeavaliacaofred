@@ -123,11 +123,17 @@ create table if not exists public.bimonthly_exams (
   subject text not null,
   grade text not null,
   bimester text not null,
+  title text,
+  school_class text,
   topics jsonb,
   questions jsonb,
   visual_content jsonb,
   created_at timestamptz not null default now()
 );
+
+-- Garantia idempotente caso a tabela já exista sem essas colunas
+alter table public.bimonthly_exams add column if not exists title text;
+alter table public.bimonthly_exams add column if not exists school_class text;
 
 create table if not exists public.teacher_profiles (
   id text primary key,
