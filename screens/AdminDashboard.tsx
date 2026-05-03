@@ -366,18 +366,45 @@ export const AdminDashboard: React.FC = () => {
     setIsSavingNote(true);
     try {
       const subjectTag = teacherSubject || 'geral';
-      const composedContent = `[${newNoteCategory}] ${newNoteText.trim()}`;
+      // Envia em colunas separadas (category) + ambos os nomes possíveis
+      // de matéria (subject e teacher_subject) para máxima compatibilidade
+      // com diferentes versões do schema.
+      const payload: any = {
+        student_id: notesModalStudent.id,
+        category: newNoteCategory,
+        subject: subjectTag,
+        teacher_subject: subjectTag,
+        content: newNoteText.trim(),
+      };
       const { data, error } = await supabase
         .from('student_notes')
-        .insert({
-          student_id: notesModalStudent.id,
-          subject: subjectTag,
-          content: composedContent,
-        })
+        .insert(payload)
         .select('*')
         .single();
-      if (error) throw error;
-      setStudentNotes([data, ...studentNotes]);
+      if (error) {
+        // Fallback: se a coluna teacher_subject não existir, tenta sem ela
+        if (/teacher_subject/i.test(error.message)) {
+          delete payload.teacher_subject;
+          const retry = await supabase.from('student_notes').insert(payload).select('*').single();
+          if (retry.error) throw retry.error;
+          setStudentNotes([retry.data, ...studentNotes]);
+        } else if (/category/i.test(error.message)) {
+          // Schema ainda sem `category`: grave no formato antigo
+          const legacy = {
+            student_id: notesModalStudent.id,
+            subject: subjectTag,
+            teacher_subject: subjectTag,
+            content: `[${newNoteCategory}] ${newNoteText.trim()}`,
+          };
+          const retry = await supabase.from('student_notes').insert(legacy).select('*').single();
+          if (retry.error) throw retry.error;
+          setStudentNotes([retry.data, ...studentNotes]);
+        } else {
+          throw error;
+        }
+      } else {
+        setStudentNotes([data, ...studentNotes]);
+      }
       setNewNoteText('');
       setNewNoteCategory('comportamento');
     } catch (e: any) {
@@ -750,7 +777,7 @@ export const AdminDashboard: React.FC = () => {
     if (!confirm(`Publicar este simulado? ${examQuestionsDraft.length} questões serão liberadas para os alunos.`)) return;
     setIsPublishingExam(true);
     try {
-      const payload = {
+      const payload: any = {
         subject: teacherSubject || 'Geral',
         grade: String(examGrade),
         bimester: String(examBimester),
@@ -759,7 +786,22 @@ export const AdminDashboard: React.FC = () => {
         topics: examTopics.split(',').map(t => t.trim()).filter(Boolean),
         questions: examQuestionsDraft,
       };
-      const { error } = await supabase.from('bimonthly_exams').insert(payload);
+      let { error } = await supabase.from('bimonthly_exams').insert(payload);
+      if (error && /title|school_class/i.test(error.message)) {
+        // Schema antigo — tenta sem as colunas novas
+        console.warn('Schema antigo detectado, removendo title/school_class:', error.message);
+        delete payload.title;
+        delete payload.school_class;
+        const retry = await supabase.from('bimonthly_exams').insert(payload);
+        error = retry.error;
+        if (!error) {
+          alert(
+            'Simulado publicado, mas em modo de compatibilidade.\n\n' +
+            '⚠️ Para usar título personalizado e segmentação por turma, ' +
+            'rode o script supabase/fix_all.sql no SQL Editor do Supabase.'
+          );
+        }
+      }
       if (error) throw error;
       alert('Simulado publicado com sucesso! Os alunos já podem realizá-lo.');
       // Reset
@@ -768,7 +810,8 @@ export const AdminDashboard: React.FC = () => {
       setExamTopics('');
       fetchPublishedExams();
     } catch (e: any) {
-      alert('Erro ao publicar: ' + e.message);
+      alert('Erro ao publicar: ' + (e?.message || ''));
+      console.error('publishExam error:', e);
     } finally {
       setIsPublishingExam(false);
     }
@@ -804,14 +847,25 @@ export const AdminDashboard: React.FC = () => {
         return filterClass === 'all' || s.school_class === filterClass;
       });
 
-      // Buscar anotações pedagógicas (student_notes) para enriquecer o cruzamento
+      // Buscar anotações (student_notes) + extrair categoria pra enriquecer
+      // o cruzamento da IA. Cada categoria vira um sinal pedagógico distinto.
       let behaviorNotes: string[] = [];
       try {
-        let qb = supabase.from('student_notes').select('content, subject, created_at').order('created_at', { ascending: false });
+        let qb = supabase.from('student_notes').select('*').order('created_at', { ascending: false });
         if (reportTarget === 'student' && selectedReportStudent) qb = qb.eq('student_id', selectedReportStudent);
-        if (!isSuper && teacherSubject) qb = qb.eq('subject', teacherSubject);
         const { data: notes } = await qb;
-        behaviorNotes = (notes || []).map((n: any) => `[${n.subject || 'geral'}] ${n.content}`);
+        behaviorNotes = (notes || []).map((n: any) => {
+          // Tenta extrair categoria da coluna ou do prefixo "[categoria] texto"
+          let cat = (n.category || '').toLowerCase();
+          let content = n.content || '';
+          if (!cat) {
+            const m = String(content).match(/^\[([^\]]+)\]\s*(.*)$/s);
+            if (m) { cat = m[1].toLowerCase(); content = m[2]; }
+          }
+          const subj = n.subject || n.teacher_subject || 'geral';
+          const date = n.created_at ? new Date(n.created_at).toLocaleDateString('pt-BR') : '';
+          return `[${cat || 'geral'} • ${subj} • ${date}] ${content}`;
+        });
       } catch (e) {
         console.warn('Falha ao buscar student_notes:', e);
       }
@@ -2264,9 +2318,15 @@ export const AdminDashboard: React.FC = () => {
                 </p>
               ) : (
                 studentNotes.map((note: any) => {
-                  const m = String(note.content || '').match(/^\[([^\]]+)\]\s*(.*)$/s);
-                  const category = m?.[1] || 'geral';
-                  const content = m?.[2] || note.content;
+                  // Prefere a coluna category (nova). Fallback para regex em
+                  // anotações antigas no formato "[categoria] texto".
+                  let category: string = note.category || '';
+                  let content: string = note.content || '';
+                  if (!category) {
+                    const m = String(content).match(/^\[([^\]]+)\]\s*(.*)$/s);
+                    if (m) { category = m[1]; content = m[2]; }
+                  }
+                  category = (category || 'geral').toLowerCase();
                   const colorMap: Record<string, string> = {
                     comportamento: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
                     destaque: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
