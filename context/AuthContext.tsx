@@ -24,9 +24,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     async function loadStudent(userId: string, fallbackEmail?: string | null, fallbackName?: string | null) {
       try {
+        // CRÍTICO: NÃO selecionar photo_url no login. Cada foto é base64
+        // de ~1.5 MB e deixa o login lento. A foto é carregada sob demanda
+        // por quem precisar (Header, Profile, StudentAvatar).
         const { data, error } = await supabase
           .from('students')
-          .select('*')
+          .select('id,name,email,school_class,grade,role,created_at')
           .eq('id', userId)
           .maybeSingle();
 
@@ -34,6 +37,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (data) {
           setStudent(data);
+          // Foto em background — não bloqueia a navegação
+          supabase
+            .from('students')
+            .select('photo_url')
+            .eq('id', userId)
+            .maybeSingle()
+            .then(({ data: ph }) => {
+              if (mounted && ph?.photo_url) {
+                setStudent((prev: any) => prev ? { ...prev, photo_url: ph.photo_url } : prev);
+              }
+            });
         } else if (!error) {
           // Autenticado mas sem registro em students (ex.: admin via Google)
           setStudent({ id: userId, email: fallbackEmail || '', name: fallbackName || 'Usuário' });

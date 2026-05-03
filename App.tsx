@@ -1,20 +1,30 @@
 
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { HashRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { Header } from './components/Header';
-import { Home } from './screens/Home';
-import { GradeView } from './screens/GradeView';
-import { LessonView } from './screens/LessonView';
-import { Contact } from './screens/Contact';
-import { AdminDashboard } from './screens/AdminDashboard';
-import { Login } from './screens/Login';
-import { MyActivities } from './screens/MyActivities';
-import { EvaluationView } from './screens/EvaluationView';
-import { Profile } from './screens/Profile';
 import { TEACHER_INFO, TEACHER_EMAILS } from './data_admin';
 import { Mail, Lock } from 'lucide-react';
+
+// Telas carregadas sob demanda — chunks separados para a primeira tela
+// (Home + Login) carregar rapidamente. Cada rota baixa só seu pedaço.
+const Login          = lazy(() => import('./screens/Login').then(m => ({ default: m.Login })));
+const Home           = lazy(() => import('./screens/Home').then(m => ({ default: m.Home })));
+const GradeView      = lazy(() => import('./screens/GradeView').then(m => ({ default: m.GradeView })));
+const LessonView     = lazy(() => import('./screens/LessonView').then(m => ({ default: m.LessonView })));
+const Contact        = lazy(() => import('./screens/Contact').then(m => ({ default: m.Contact })));
+const AdminDashboard = lazy(() => import('./screens/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const MyActivities   = lazy(() => import('./screens/MyActivities').then(m => ({ default: m.MyActivities })));
+const EvaluationView = lazy(() => import('./screens/EvaluationView').then(m => ({ default: m.EvaluationView })));
+const Profile        = lazy(() => import('./screens/Profile').then(m => ({ default: m.Profile })));
+
+// Spinner padrão enquanto a tela carrega
+const RouteFallback = () => (
+  <div className="h-[60vh] flex items-center justify-center">
+    <div className="w-8 h-8 border-4 border-slate-200 border-t-tocantins-blue rounded-full animate-spin"></div>
+  </div>
+);
 
 const StudentRoute = ({ children }: { children?: React.ReactNode }) => {
   const { student, isLoading } = useAuth();
@@ -44,18 +54,20 @@ function AppContent() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans transition-colors duration-300">
       <Header />
       <main className="flex-grow">
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/admin/login" element={<Login adminMode={true} />} />
-          <Route path="/" element={<StudentRoute><Home /></StudentRoute>} />
-          <Route path="/grade/:id" element={<StudentRoute><GradeView /></StudentRoute>} />
-          <Route path="/lesson/:lessonId" element={<StudentRoute><LessonView /></StudentRoute>} />
-          <Route path="/evaluation/:examId" element={<StudentRoute><EvaluationView /></StudentRoute>} />
-          <Route path="/contact" element={<StudentRoute><Contact /></StudentRoute>} />
-          <Route path="/my-activities" element={<StudentRoute><MyActivities /></StudentRoute>} />
-          <Route path="/profile" element={<StudentRoute><Profile /></StudentRoute>} />
-          <Route path="/admin" element={<AdminDashboard />} />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/admin/login" element={<Login adminMode={true} />} />
+            <Route path="/" element={<StudentRoute><Home /></StudentRoute>} />
+            <Route path="/grade/:id" element={<StudentRoute><GradeView /></StudentRoute>} />
+            <Route path="/lesson/:lessonId" element={<StudentRoute><LessonView /></StudentRoute>} />
+            <Route path="/evaluation/:examId" element={<StudentRoute><EvaluationView /></StudentRoute>} />
+            <Route path="/contact" element={<StudentRoute><Contact /></StudentRoute>} />
+            <Route path="/my-activities" element={<StudentRoute><MyActivities /></StudentRoute>} />
+            <Route path="/profile" element={<StudentRoute><Profile /></StudentRoute>} />
+            <Route path="/admin" element={<AdminDashboard />} />
+          </Routes>
+        </Suspense>
       </main>
       <footer className="bg-slate-900 text-slate-400 py-12">
         <div className="container mx-auto px-4 max-w-6xl">
