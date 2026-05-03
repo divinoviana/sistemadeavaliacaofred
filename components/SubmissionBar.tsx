@@ -54,26 +54,21 @@ export const SubmissionBar: React.FC<Props> = ({
     
     let currentAIData = aiData;
     try {
-      // Tenta avaliar com IA se não tiver dados, mas não deixa isso travar o envio
+      // evaluateActivities NUNCA lança — corrige objetivas localmente e
+      // tenta IA pras discursivas. Se IA cair, ainda retorna AIResponse
+      // completa com fallback. Por isso não precisamos mais de try/catch aqui.
       if (!currentAIData) {
-        try {
-          const q = submissionData.map(item => ({ 
-            question: item.question, 
-            answer: item.answer,
-            correctAnswer: item.correctAnswer
-          }));
-          currentAIData = await evaluateActivities(lessonTitle, theory, q);
-        } catch (aiErr) {
-          console.warn("Falha na avaliação por IA, enviando sem nota automática:", aiErr);
-          currentAIData = {
-            generalComment: "Atividade enviada. Aguardando avaliação do professor.",
-            corrections: []
-          };
-        }
+        const q = submissionData.map(item => ({
+          question: item.question,
+          answer: item.answer,
+          correctAnswer: item.correctAnswer,
+        }));
+        currentAIData = await evaluateActivities(lessonTitle, theory, q);
       }
 
-      const avgScore = currentAIData?.corrections?.length > 0 
-        ? currentAIData.corrections.reduce((acc, c) => acc + (Number(c.score) || 0), 0) / currentAIData.corrections.length 
+      const corrections = currentAIData?.corrections || [];
+      const avgScore = corrections.length > 0
+        ? corrections.reduce((acc, c) => acc + (Number(c.score) || 0), 0) / corrections.length
         : 0;
 
       console.log("Iniciando gravação no Supabase...");

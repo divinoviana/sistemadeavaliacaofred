@@ -221,9 +221,12 @@ export const AdminDashboard: React.FC = () => {
 
   const fetchStudents = async () => {
     try {
+      // CRÍTICO: NÃO selecionar photo_url aqui. Cada foto é base64 ~1.5 MB;
+      // 383 alunos × 1.5 MB = ~580 MB que estoura/trunca o response.
+      // A foto é carregada sob demanda no <StudentAvatar/> quando o card aparece.
       const { data, error } = await supabase
         .from('students')
-        .select('*')
+        .select('id,name,email,school_class,grade,role,created_at')
         .order('name', { ascending: true });
       if (error) throw error;
       setStudents(data || []);
@@ -1261,7 +1264,7 @@ export const AdminDashboard: React.FC = () => {
                         >
                            <div className="flex items-center gap-4">
                              <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md ring-4 ring-white dark:ring-slate-900">
-                                <StudentAvatar studentId={s.id} studentName={s.name} photoUrl={s.photo_url} />
+                                <StudentAvatar studentId={s.id} studentName={s.name} />
                              </div>
                              <div className="flex-1 min-w-0">
                                 <h4 className="font-black text-slate-800 dark:text-slate-100 truncate text-sm uppercase tracking-tight">{s.name}</h4>
@@ -1318,7 +1321,7 @@ export const AdminDashboard: React.FC = () => {
                    <div key={st.id} className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border dark:border-slate-800 shadow-sm group hover:shadow-xl transition-all">
                       <div className="flex flex-col items-center text-center">
                          <div className="w-20 h-20 rounded-3xl overflow-hidden mb-4 shadow-lg ring-4 ring-slate-50 dark:ring-slate-800 group-hover:scale-110 transition-transform">
-                            <StudentAvatar studentId={st.id} studentName={st.name} photoUrl={st.photo_url} />
+                            <StudentAvatar studentId={st.id} studentName={st.name} />
                          </div>
                          <h4 className="font-black text-slate-800 dark:text-white uppercase tracking-tighter text-sm mb-1">{st.name}</h4>
                          <span className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest">{st.grade}ª Série • {st.school_class}</span>
@@ -1804,7 +1807,7 @@ export const AdminDashboard: React.FC = () => {
               <div className="p-8 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
                  <div className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-tocantins-blue rounded-2xl flex items-center justify-center text-white shadow-lg overflow-hidden ring-4 ring-white dark:ring-slate-900">
-                       <StudentAvatar studentId={selectedStudentEval.id} studentName={selectedStudentEval.name} photoUrl={selectedStudentEval.photo_url} />
+                       <StudentAvatar studentId={selectedStudentEval.id} studentName={selectedStudentEval.name} />
                     </div>
                     <div>
                        <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tighter text-xl">{selectedStudentEval.name}</h3>

@@ -354,49 +354,141 @@ Critérios: padrão ENEM/Vestibular elite, distratores inteligentes, recurso vis
 // ----------------------------------------------------------------------
 // 4) AVALIA RESPOSTAS DO ALUNO
 // ----------------------------------------------------------------------
+// Estratégia híbrida:
+// - QUESTÕES OBJETIVAS (com `correctAnswer`): nota calculada LOCALMENTE em JS,
+//   sem depender da IA. Comparação string-normalizada → 0 ou 10.
+// - QUESTÕES DISCURSIVAS (sem `correctAnswer`): IA avalia.
+// - COMENTÁRIO GERAL: IA escreve, mas se falhar usamos um fallback derivado
+//   do desempenho objetivo.
+// Assim, mesmo que a DeepSeek esteja sem saldo / fora do ar, as objetivas
+// são corrigidas corretamente e o aluno NUNCA recebe 0.0 indevido.
+// ----------------------------------------------------------------------
+
+/** Normaliza string para comparação: lowercase, sem acentos, trim, sem pontuação extra. */
+function normalizeAnswer(s: string): string {
+  return (s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')      // remove acentos
+    .toLowerCase()
+    .replace(/[\s\.,;:!?"'()\-\/]/g, '')  // remove espaços e pontuação
+    .trim();
+}
+
+/** Para questões "Opção X: ...", compara a letra (X). Senão, compara a string toda. */
+function isAnswerCorrect(studentAnswer: string, correctAnswer: string): boolean {
+  if (!studentAnswer || !correctAnswer) return false;
+
+  // Tenta extrair a letra (a-e) do início "Opção X:"
+  const letterRe = /op[cç][aã]o\s+([a-e])/i;
+  const sLetter = studentAnswer.match(letterRe)?.[1]?.toLowerCase();
+  const cLetter = correctAnswer.match(letterRe)?.[1]?.toLowerCase();
+  if (sLetter && cLetter) return sLetter === cLetter;
+
+  // Senão, comparação normalizada
+  return normalizeAnswer(studentAnswer) === normalizeAnswer(correctAnswer);
+}
+
 export const evaluateActivities = async (
   lessonTitle: string,
   theoryContext: string,
   questionsAndAnswers: EvaluationQuestionItem[]
 ): Promise<AIResponse> => {
-  return withRetry(async () => {
-    const prompt = `Você corrige respostas de alunos do Ensino Médio.
+  // 1) Separar objetivas (com gabarito) de discursivas (sem gabarito)
+  const objectiveItems = questionsAndAnswers.filter(q => q.correctAnswer && q.correctAnswer.trim() !== '');
+  const discursiveItems = questionsAndAnswers.filter(q => !q.correctAnswer || q.correctAnswer.trim() === '');
+
+  // 2) Corrigir objetivas LOCALMENTE — fonte da verdade
+  const objectiveCorrections: CorrectionResult[] = objectiveItems.map(q => {
+    const correct = isAnswerCorrect(q.answer || '', q.correctAnswer || '');
+    return {
+      question: q.question,
+      studentAnswer: q.answer || '(não respondida)',
+      isCorrect: correct,
+      score: correct ? 10 : 0,
+      feedback: correct
+        ? 'Correto! Você marcou a alternativa adequada.'
+        : `Resposta incorreta. A alternativa correta era: ${q.correctAnswer}`,
+    };
+  });
+
+  const totalObjective = objectiveCorrections.length;
+  const correctObjective = objectiveCorrections.filter(c => c.isCorrect).length;
+  const objectivePct = totalObjective > 0 ? Math.round((correctObjective / totalObjective) * 100) : 0;
+
+  // 3) Avaliar discursivas via IA (apenas se houver alguma)
+  let discursiveCorrections: CorrectionResult[] = [];
+  let aiGeneralComment: string | null = null;
+
+  if (discursiveItems.length > 0) {
+    try {
+      const prompt = `Você corrige questões DISCURSIVAS de alunos do Ensino Médio (Ciências Humanas).
 
 Aula: "${lessonTitle}"
 Contexto teórico (resumo): "${(theoryContext || '').substring(0, 2000)}"
 
-Respostas a avaliar (JSON com pergunta, resposta do aluno e — quando houver — resposta correta esperada):
-${JSON.stringify(questionsAndAnswers)}
+Respostas a avaliar (JSON):
+${JSON.stringify(discursiveItems.map(q => ({ question: q.question, answer: q.answer })))}
 
-Devolva APENAS o JSON neste formato exato:
+Devolva APENAS JSON neste formato exato:
 {
-  "generalComment": "balanço geral do desempenho, pontos fortes e fracos",
+  "generalComment": "balanço geral do desempenho nas discursivas",
   "corrections": [
     {
       "question": "(repita o enunciado)",
       "studentAnswer": "(repita a resposta do aluno)",
       "isCorrect": true | false,
-      "score": (número 0–10),
+      "score": (0..10),
       "feedback": "feedback detalhado, corrigindo erros conceituais e sugerindo aprofundamento"
     }
-    ... (uma entrada por pergunta enviada)
   ]
 }
 
-Regras de pontuação:
-- Se "correctAnswer" estiver presente e a resposta do aluno coincidir (ignorando caixa/acentos), score = 10 e isCorrect = true.
-- Se "correctAnswer" estiver presente e diferente, score = 0 e isCorrect = false. Mas o feedback deve explicar a opção correta.
-- Para questões discursivas (sem correctAnswer), avalie de 0 a 10 conforme densidade conceitual e coerência. isCorrect = true se score ≥ 6.`;
+Critérios:
+- score 0..10 conforme densidade conceitual, coerência argumentativa e domínio do tema.
+- isCorrect = true quando score >= 6.
+- Resposta vazia ou "não respondida" recebe score 0.`;
 
-    const raw = await callDeepSeek(prompt, {
-      model: 'deepseek-chat',
-      json: true,
-      temperature: 0.3,
-      maxTokens: 4096,
-      systemPrompt: 'Você é um tutor acadêmico rigoroso e construtivo. Devolva apenas JSON válido.',
-    });
-    return extractJson<AIResponse>(raw);
-  });
+      const raw = await withRetry(() => callDeepSeek(prompt, {
+        model: 'deepseek-chat',
+        json: true,
+        temperature: 0.3,
+        maxTokens: 4096,
+        systemPrompt: 'Você é um tutor acadêmico. Devolva apenas JSON válido.',
+      }));
+      const aiResult = extractJson<AIResponse>(raw);
+      discursiveCorrections = aiResult.corrections || [];
+      aiGeneralComment = aiResult.generalComment || null;
+    } catch (err) {
+      console.warn('[IA] Falha ao corrigir discursivas; aplicando fallback:', err);
+      // Fallback: aceita resposta com >= 30 caracteres como nota mínima
+      discursiveCorrections = discursiveItems.map(q => {
+        const ans = (q.answer || '').trim();
+        const score = ans.length >= 30 ? 6 : 0;
+        return {
+          question: q.question,
+          studentAnswer: ans || '(não respondida)',
+          isCorrect: score >= 6,
+          score,
+          feedback: score >= 6
+            ? 'Resposta registrada. Aguardando avaliação detalhada do professor.'
+            : 'Resposta muito breve ou ausente. O professor irá revisar.',
+        };
+      });
+    }
+  }
+
+  // 4) Comentário geral (IA falhou ou só temos objetivas → derivado)
+  let generalComment = aiGeneralComment;
+  if (!generalComment) {
+    generalComment = totalObjective > 0
+      ? `Atividade entregue. Você acertou ${correctObjective} de ${totalObjective} questões objetivas (${objectivePct}%). ${discursiveItems.length > 0 ? 'As discursivas serão revisadas pelo professor.' : ''}`.trim()
+      : 'Atividade entregue. Aguardando avaliação do professor.';
+  }
+
+  return {
+    generalComment,
+    corrections: [...objectiveCorrections, ...discursiveCorrections],
+  };
 };
 
 // ----------------------------------------------------------------------
