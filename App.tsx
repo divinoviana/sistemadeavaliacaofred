@@ -13,13 +13,30 @@ import { Login } from './screens/Login';
 import { MyActivities } from './screens/MyActivities';
 import { EvaluationView } from './screens/EvaluationView';
 import { Profile } from './screens/Profile';
-import { TEACHER_INFO } from './data_admin';
+import { TEACHER_INFO, TEACHER_EMAILS } from './data_admin';
 import { Mail, Lock } from 'lucide-react';
 
 const StudentRoute = ({ children }: { children?: React.ReactNode }) => {
   const { student, isLoading } = useAuth();
-  if (isLoading) return <div className="h-screen flex items-center justify-center bg-slate-50"><div className="w-8 h-8 border-4 border-slate-200 border-t-tocantins-blue rounded-full animate-spin"></div></div>;
-  return student ? <>{children}</> : <Navigate to="/login" />;
+  if (isLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-4 border-slate-200 border-t-tocantins-blue rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+  if (!student) return <Navigate to="/login" replace />;
+
+  // Aluno autenticado mas SEM perfil completo (típico do 1º login Google):
+  // manda para /login para o formulário de "Completar Perfil" (turma + série).
+  const adminEmails = ['admin@admin.com', 'divinoviana@gmail.com', ...Object.values(TEACHER_EMAILS)];
+  const isAdminEmail = adminEmails.includes(String(student.email || '').toLowerCase());
+  const profileIncomplete = !student.grade || !student.school_class || student.grade === 'N/A' || student.school_class === 'N/A';
+  if (profileIncomplete && !isAdminEmail) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
 };
 
 function AppContent() {

@@ -36,9 +36,18 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
     }
   };
 
-  // Redirect if already logged in and profile is complete
+  // Redirect só quando perfil está realmente completo (grade + turma).
+  // Mantém na tela de login enquanto aluno Google não escolheu série/turma.
   React.useEffect(() => {
-    if (student && !googleUserPending && student.grade && !isAdminLogin) {
+    if (
+      student &&
+      !googleUserPending &&
+      student.grade &&
+      student.school_class &&
+      student.grade !== 'N/A' &&
+      student.school_class !== 'N/A' &&
+      !isAdminLogin
+    ) {
       navigate('/');
     }
   }, [student, googleUserPending, navigate, isAdminLogin]);
@@ -141,8 +150,9 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      // OAuth via Supabase (redireciona). Após o retorno, o useEffect abaixo
-      // detecta a sessão e roteia conforme o estado do student.
+      // OAuth via Supabase. Voltamos para a raiz do app — o StudentRoute em
+      // App.tsx redireciona pra /login automaticamente quando o aluno Google
+      // ainda não escolheu série e turma (perfil incompleto).
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: window.location.origin },
@@ -157,15 +167,23 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
   };
 
   // Após retorno do OAuth: se o usuário Google ainda não tem registro em
-  // `students`, abrimos o fluxo de "completar perfil" (turma + série).
+  // `students` (ou está com perfil incompleto), abrimos o fluxo de
+  // "completar perfil" (turma + série).
   React.useEffect(() => {
+    if (isAdminLogin) return; // tela admin não trata aluno aqui
     if (!student?.id) return;
-    if (student.school_class && student.grade) return; // perfil completo
     if (googleUserPending) return; // já está em fluxo
+
+    const profileComplete =
+      student.school_class &&
+      student.grade &&
+      student.school_class !== 'N/A' &&
+      student.grade !== 'N/A';
+    if (profileComplete) return;
 
     // Detectar admin via email (não precisa criar student)
     const adminEmails = ['admin@admin.com', 'divinoviana@gmail.com', ...Object.values(TEACHER_EMAILS)];
-    if (adminEmails.includes((student.email || '').toLowerCase())) return;
+    if (adminEmails.includes(String(student.email || '').toLowerCase())) return;
 
     // Pendente de completar perfil
     setGoogleUserPending({
@@ -174,7 +192,7 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
       email: student.email,
       photoURL: student.photo_url,
     });
-  }, [student, googleUserPending]);
+  }, [student, googleUserPending, isAdminLogin]);
 
   const handleCompleteGoogleRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
