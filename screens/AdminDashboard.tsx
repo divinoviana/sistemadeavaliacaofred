@@ -557,17 +557,53 @@ export const AdminDashboard: React.FC = () => {
     setIsGeneratingReport(true);
     try {
       const { generatePedagogicalSummary } = await import('../services/aiService');
-      const filteredSubmissions = submissions.filter(s => 
-        reportTarget === 'student' ? s.student_id === selectedReportStudent : (filterClass === 'all' || s.school_class === filterClass)
-      );
-      
-      const result = await generatePedagogicalSummary(reportTarget === 'student' ? 'INDIVIDUAL' : 'TURMA', {
-        subject: teacherSubject || 'Geral',
-        grades: filteredSubmissions.map(s => s.score || 0),
-        notes: filteredSubmissions.map(s => s.teacher_feedback || ''),
-        studentName: reportTarget === 'student' ? students.find(s => s.id === selectedReportStudent)?.name : undefined,
-        schoolClass: filterClass
+
+      // Resolve nome do aluno selecionado (caso individual)
+      const targetStudent = reportTarget === 'student'
+        ? students.find(s => s.id === selectedReportStudent)
+        : null;
+
+      // Submissões relevantes para o relatório
+      const relevant = submissions.filter(s => {
+        if (reportTarget === 'student') {
+          return s.student_id === selectedReportStudent
+              || (targetStudent && s.student_name?.toLowerCase().trim() === targetStudent.name?.toLowerCase().trim());
+        }
+        return filterClass === 'all' || s.school_class === filterClass;
       });
+
+      // Buscar anotações pedagógicas (student_notes) para enriquecer o cruzamento
+      let behaviorNotes: string[] = [];
+      try {
+        let qb = supabase.from('student_notes').select('content, subject, created_at').order('created_at', { ascending: false });
+        if (reportTarget === 'student' && selectedReportStudent) qb = qb.eq('student_id', selectedReportStudent);
+        if (!isSuper && teacherSubject) qb = qb.eq('subject', teacherSubject);
+        const { data: notes } = await qb;
+        behaviorNotes = (notes || []).map((n: any) => `[${n.subject || 'geral'}] ${n.content}`);
+      } catch (e) {
+        console.warn('Falha ao buscar student_notes:', e);
+      }
+
+      const activities = relevant.map((s: any) => ({
+        title: s.lesson_title,
+        score: Number(s.score) || 0,
+        bimester: (s.lesson_id ? lessonToBimesterMap[s.lesson_id] : null) || lessonToBimesterMap[s.lesson_title] || undefined,
+        date: s.submitted_at || s.submission_date,
+        subject: s.subject,
+      }));
+
+      const result = await generatePedagogicalSummary(
+        reportTarget === 'student' ? 'INDIVIDUAL' : 'TURMA',
+        {
+          subject: teacherSubject || 'Geral',
+          grades: relevant.map(s => Number(s.score) || 0),
+          notes: relevant.map(s => s.teacher_feedback || '').filter(Boolean),
+          studentName: targetStudent?.name,
+          schoolClass: filterClass,
+          activities,
+          behaviorNotes,
+        }
+      );
       setAiReportResult(result);
     } catch (e: any) {
       alert("Erro ao gerar relatório: " + e.message);
