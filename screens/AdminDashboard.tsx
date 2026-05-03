@@ -140,6 +140,18 @@ export const AdminDashboard: React.FC = () => {
 
   const [isSeedingStudents, setIsSeedingStudents] = useState(false);
 
+  // Modais da aba Estudantes (carômetro)
+  const [notesModalStudent, setNotesModalStudent] = useState<any | null>(null);
+  const [studentNotes, setStudentNotes] = useState<any[]>([]);
+  const [newNoteText, setNewNoteText] = useState('');
+  const [newNoteCategory, setNewNoteCategory] = useState<'comportamento' | 'destaque' | 'pedagogico' | 'familiar' | 'saude'>('comportamento');
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+
+  const [settingsModalStudent, setSettingsModalStudent] = useState<any | null>(null);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [isDeletingStudent, setIsDeletingStudent] = useState(false);
+
   useEffect(() => {
     if (!isAuthLoading && !teacherSubject && !isSuper) {
       navigate('/admin/login');
@@ -322,6 +334,123 @@ export const AdminDashboard: React.FC = () => {
       console.error("Erro ao atualizar:", e);
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  // ============================================================
+  // ANOTAÇÕES SOBRE O ESTUDANTE (student_notes)
+  // ============================================================
+  const openNotesModal = async (st: any) => {
+    setNotesModalStudent(st);
+    setNewNoteText('');
+    setStudentNotes([]);
+    setIsLoadingNotes(true);
+    try {
+      const { data, error } = await supabase
+        .from('student_notes')
+        .select('*')
+        .eq('student_id', st.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setStudentNotes(data || []);
+    } catch (e: any) {
+      console.error('Erro ao buscar anotações:', e);
+      alert('Não foi possível carregar as anotações: ' + (e?.message || ''));
+    } finally {
+      setIsLoadingNotes(false);
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!notesModalStudent || !newNoteText.trim() || isSavingNote) return;
+    setIsSavingNote(true);
+    try {
+      const subjectTag = teacherSubject || 'geral';
+      const composedContent = `[${newNoteCategory}] ${newNoteText.trim()}`;
+      const { data, error } = await supabase
+        .from('student_notes')
+        .insert({
+          student_id: notesModalStudent.id,
+          subject: subjectTag,
+          content: composedContent,
+        })
+        .select('*')
+        .single();
+      if (error) throw error;
+      setStudentNotes([data, ...studentNotes]);
+      setNewNoteText('');
+      setNewNoteCategory('comportamento');
+    } catch (e: any) {
+      console.error('Erro ao salvar anotação:', e);
+      alert('Não foi possível salvar: ' + (e?.message || 'tente novamente.'));
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!confirm('Excluir esta anotação?')) return;
+    try {
+      const { error } = await supabase.from('student_notes').delete().eq('id', noteId);
+      if (error) throw error;
+      setStudentNotes(studentNotes.filter(n => n.id !== noteId));
+    } catch (e: any) {
+      alert('Erro ao excluir: ' + (e?.message || ''));
+    }
+  };
+
+  // ============================================================
+  // CONFIGURAÇÕES DO ESTUDANTE (reset senha + excluir)
+  // ============================================================
+  const handleResetStudentPassword = async () => {
+    if (!settingsModalStudent || !settingsModalStudent.email) {
+      alert('Aluno sem e-mail cadastrado — não é possível enviar link de redefinição.');
+      return;
+    }
+    if (!confirm(`Enviar link de redefinição de senha para ${settingsModalStudent.email}?`)) return;
+    setIsResettingPassword(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        String(settingsModalStudent.email).toLowerCase(),
+        { redirectTo: window.location.origin }
+      );
+      if (error) throw error;
+      alert(`Link de redefinição enviado para ${settingsModalStudent.email}. O aluno deverá verificar a caixa de entrada (e o spam).`);
+    } catch (e: any) {
+      console.error('Erro ao enviar reset:', e);
+      alert('Falha ao enviar: ' + (e?.message || ''));
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!settingsModalStudent) return;
+    const studentName = settingsModalStudent.name;
+    const confirm1 = confirm(
+      `⚠️ EXCLUIR estudante "${studentName}"?\n\n` +
+      `As submissões já enviadas serão MANTIDAS (com referência só pelo nome).\n` +
+      `O aluno NÃO conseguirá mais fazer login.\n\n` +
+      `Esta ação não pode ser desfeita.`
+    );
+    if (!confirm1) return;
+    const typed = prompt(`Para confirmar, digite EXCLUIR (em maiúsculas):`);
+    if (typed !== 'EXCLUIR') {
+      alert('Cancelado.');
+      return;
+    }
+    setIsDeletingStudent(true);
+    try {
+      const { error } = await supabase.from('students').delete().eq('id', settingsModalStudent.id);
+      if (error) throw error;
+      alert(`Estudante ${studentName} removido do sistema.`);
+      setSettingsModalStudent(null);
+      fetchStudents();
+    } catch (e: any) {
+      console.error('Erro ao excluir aluno:', e);
+      alert('Falha ao excluir: ' + (e?.message || ''));
+    } finally {
+      setIsDeletingStudent(false);
     }
   };
 
@@ -1433,23 +1562,42 @@ export const AdminDashboard: React.FC = () => {
                  {filteredStudents.map((st: any) => (
                    <div key={st.id} className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border dark:border-slate-800 shadow-sm group hover:shadow-xl transition-all">
                       <div className="flex flex-col items-center text-center">
-                         <div className="w-20 h-20 rounded-3xl overflow-hidden mb-4 shadow-lg ring-4 ring-slate-50 dark:ring-slate-800 group-hover:scale-110 transition-transform">
+                         <button
+                           onClick={() => openNotesModal(st)}
+                           title="Clique para anotar comportamento, destaques, observações"
+                           className="w-20 h-20 rounded-3xl overflow-hidden mb-4 shadow-lg ring-4 ring-slate-50 dark:ring-slate-800 group-hover:scale-110 transition-transform cursor-pointer hover:ring-tocantins-blue dark:hover:ring-tocantins-yellow relative"
+                         >
                             <StudentAvatar studentId={st.id} studentName={st.name} />
-                         </div>
+                            <span className="absolute inset-0 bg-tocantins-blue/0 hover:bg-tocantins-blue/30 dark:hover:bg-tocantins-yellow/30 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                              <Pencil size={20} className="text-white drop-shadow-lg"/>
+                            </span>
+                         </button>
                          <h4 className="font-black text-slate-800 dark:text-white uppercase tracking-tighter text-sm mb-1">{st.name}</h4>
                          <span className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest">{st.grade}ª Série • {st.school_class}</span>
-                         
+
                          <div className="mt-4 flex gap-2">
-                            <button 
+                            <button
+                              onClick={() => openNotesModal(st)}
+                              title="Anotações sobre o estudante"
+                              className="p-2 text-slate-400 hover:text-tocantins-blue dark:hover:text-tocantins-yellow transition-colors cursor-pointer"
+                            >
+                               <Pencil size={18}/>
+                            </button>
+                            <button
                               onClick={() => {
                                 setSelectedChatStudentId(st.id);
                                 setActiveTab('messages');
                               }}
-                              className="p-2 text-slate-400 hover:text-tocantins-blue dark:hover:text-tocantins-yellow transition-colors"
+                              title="Conversar com o estudante"
+                              className="p-2 text-slate-400 hover:text-tocantins-blue dark:hover:text-tocantins-yellow transition-colors cursor-pointer"
                             >
                                <MessageSquare size={18}/>
                             </button>
-                            <button className="p-2 text-slate-400 hover:text-tocantins-blue transition-colors">
+                            <button
+                              onClick={() => setSettingsModalStudent(st)}
+                              title="Configurações: redefinir senha ou excluir"
+                              className="p-2 text-slate-400 hover:text-tocantins-blue dark:hover:text-tocantins-yellow transition-colors cursor-pointer"
+                            >
                                <Settings size={18}/>
                             </button>
                          </div>
@@ -2032,6 +2180,196 @@ export const AdminDashboard: React.FC = () => {
                  </div>
               </div>
            </div>
+        </div>
+      )}
+
+      {/* Modal: Anotações sobre o Estudante */}
+      {notesModalStudent && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+            <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-md ring-4 ring-white dark:ring-slate-900">
+                  <StudentAvatar studentId={notesModalStudent.id} studentName={notesModalStudent.name} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg leading-tight">{notesModalStudent.name}</h3>
+                  <p className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest mt-1">
+                    {notesModalStudent.grade}ª Série • Turma {notesModalStudent.school_class}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setNotesModalStudent(null)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-500 hover:text-red-500 transition-all cursor-pointer hover:rotate-90 duration-300">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Form de nova anotação */}
+            <div className="p-6 border-b dark:border-slate-800 bg-white dark:bg-slate-900">
+              <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-xs tracking-tight mb-4 flex items-center gap-2">
+                <Pencil size={14} /> Nova Anotação
+              </h4>
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { v: 'comportamento', label: 'Comportamento' },
+                    { v: 'destaque', label: 'Destaque' },
+                    { v: 'pedagogico', label: 'Pedagógico' },
+                    { v: 'familiar', label: 'Familiar' },
+                    { v: 'saude', label: 'Saúde' },
+                  ] as const).map(c => (
+                    <button
+                      key={c.v}
+                      onClick={() => setNewNoteCategory(c.v)}
+                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                        newNoteCategory === c.v
+                          ? 'bg-tocantins-blue text-white border-tocantins-blue shadow-md'
+                          : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:border-tocantins-blue/40'
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={newNoteText}
+                  onChange={e => setNewNoteText(e.target.value)}
+                  placeholder="Ex.: Conversa muito durante a aula, mexe no celular durante explicações."
+                  rows={3}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
+                />
+                <button
+                  onClick={handleAddNote}
+                  disabled={isSavingNote || !newNoteText.trim()}
+                  className="w-full bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-800 dark:hover:bg-amber-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingNote ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  Salvar Anotação
+                </button>
+              </div>
+            </div>
+
+            {/* Lista de anotações existentes */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-3 bg-slate-50/30 dark:bg-slate-950/30">
+              <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-xs tracking-tight mb-3 flex items-center gap-2">
+                <ClipboardList size={14} /> Histórico de Anotações ({studentNotes.length})
+              </h4>
+              {isLoadingNotes ? (
+                <div className="text-center py-12">
+                  <Loader2 className="animate-spin mx-auto text-tocantins-blue dark:text-tocantins-yellow" />
+                </div>
+              ) : studentNotes.length === 0 ? (
+                <p className="text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest py-8">
+                  Nenhuma anotação registrada ainda.
+                </p>
+              ) : (
+                studentNotes.map((note: any) => {
+                  const m = String(note.content || '').match(/^\[([^\]]+)\]\s*(.*)$/s);
+                  const category = m?.[1] || 'geral';
+                  const content = m?.[2] || note.content;
+                  const colorMap: Record<string, string> = {
+                    comportamento: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
+                    destaque: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
+                    pedagogico: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+                    familiar: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+                    saude: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+                  };
+                  return (
+                    <div key={note.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 group">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest ${colorMap[category] || 'bg-slate-100 dark:bg-slate-700 text-slate-600'}`}>
+                            {category}
+                          </span>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                            {note.subject && `${note.subject} • `}
+                            {note.created_at ? new Date(note.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteNote(note.id)}
+                          className="p-1.5 text-red-300 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          title="Excluir anotação"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">{content}</p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Configurações do Estudante */}
+      {settingsModalStudent && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden">
+            <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-md ring-4 ring-white dark:ring-slate-900">
+                  <StudentAvatar studentId={settingsModalStudent.id} studentName={settingsModalStudent.name} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-tight">{settingsModalStudent.name}</h3>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{settingsModalStudent.email || 'sem e-mail'}</p>
+                </div>
+              </div>
+              <button onClick={() => setSettingsModalStudent(null)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 hover:text-red-500 transition-all cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-xs tracking-tight flex items-center gap-2 mb-2">
+                <Settings size={14} /> Ações Administrativas
+              </h4>
+
+              {/* Resetar senha */}
+              <button
+                onClick={handleResetStudentPassword}
+                disabled={isResettingPassword || !settingsModalStudent.email}
+                className="w-full flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl text-left hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center text-white shadow-md shrink-0">
+                  {isResettingPassword ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Redefinir senha</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                    Envia link por e-mail para o aluno criar uma nova senha
+                  </p>
+                </div>
+              </button>
+
+              {/* Excluir estudante */}
+              <button
+                onClick={handleDeleteStudent}
+                disabled={isDeletingStudent}
+                className="w-full flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-2xl text-left hover:bg-red-100 dark:hover:bg-red-900/20 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center text-white shadow-md shrink-0">
+                  {isDeletingStudent ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Excluir estudante</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                    Remove o perfil. Submissões antigas são preservadas.
+                  </p>
+                </div>
+              </button>
+
+              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-2xl p-4 mt-4">
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold leading-relaxed flex items-start gap-2">
+                  <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                  <span>A exclusão é permanente. O aluno não conseguirá mais fazer login no portal.</span>
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
