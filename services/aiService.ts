@@ -81,21 +81,46 @@ const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Constantes injetadas em build-time pelo vite.config.ts via `define`.
+// Essas declarações garantem que o TypeScript conhece os identificadores
+// e o Vite os substitui pelo valor literal da env var no bundle.
+declare const __API_KEY__: string | undefined;
+declare const __DEEPSEEK_API_KEY__: string | undefined;
+
+function isValidKey(k: any): k is string {
+  return typeof k === 'string' && k.length > 5 && k !== 'undefined' && k !== 'null' && !k.includes('PLACEHOLDER');
+}
+
 function getApiKey(): string | null {
-  // Aceita várias formas: process.env (injetado pelo vite.config.ts via define),
-  // import.meta.env (variáveis VITE_*) e fallback de runtime.
-  const fromProcess = (typeof process !== 'undefined' && (process as any).env)
-    ? (process as any).env.API_KEY || (process as any).env.DEEPSEEK_API_KEY || (process as any).env.GEMINI_API_KEY
-    : undefined;
-  const fromImport = (import.meta as any).env || {};
-  const key =
-    fromProcess ||
-    fromImport.VITE_API_KEY ||
-    fromImport.VITE_DEEPSEEK_API_KEY ||
-    fromImport.API_KEY ||
-    fromImport.VITE_GEMINI_API_KEY;
-  if (!key || key === 'undefined' || key === '') return null;
-  return key as string;
+  // 1) Constantes injetadas pelo Vite em build-time (caminho mais robusto)
+  try { if (isValidKey(__API_KEY__)) return __API_KEY__ as string; } catch {}
+  try { if (isValidKey(__DEEPSEEK_API_KEY__)) return __DEEPSEEK_API_KEY__ as string; } catch {}
+
+  // 2) process.env injetado pelo Vite em build-time
+  try {
+    const env = typeof process !== 'undefined' && (process as any).env;
+    if (env) {
+      for (const name of ['API_KEY', 'DEEPSEEK_API_KEY', 'VITE_API_KEY', 'VITE_DEEPSEEK_API_KEY', 'GEMINI_API_KEY', 'VITE_GEMINI_API_KEY']) {
+        if (isValidKey(env[name])) return env[name] as string;
+      }
+    }
+  } catch {}
+
+  // 3) import.meta.env (vars VITE_*) — runtime
+  try {
+    const env = (import.meta as any).env || {};
+    for (const name of ['VITE_API_KEY', 'VITE_DEEPSEEK_API_KEY', 'API_KEY', 'VITE_GEMINI_API_KEY']) {
+      if (isValidKey(env[name])) return env[name] as string;
+    }
+  } catch {}
+
+  // 4) window.__APP_CONFIG__ (escape hatch para configurar em runtime)
+  try {
+    const cfg = (typeof window !== 'undefined') ? (window as any).__APP_CONFIG__ : null;
+    if (cfg && isValidKey(cfg.API_KEY)) return cfg.API_KEY;
+  } catch {}
+
+  return null;
 }
 
 interface DeepSeekOpts {
@@ -108,7 +133,12 @@ interface DeepSeekOpts {
 
 async function callDeepSeek(userPrompt: string, opts: DeepSeekOpts = {}): Promise<string> {
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error('IA Desabilitada: Chave API não configurada.');
+  if (!apiKey) {
+    throw new Error(
+      'IA desabilitada — chave API não foi embutida no bundle. ' +
+      'No Vercel: Settings → Environment Variables → adicione API_KEY com escopo Production + Preview + Development → Deployments → Redeploy (sem cache).'
+    );
+  }
 
   const body: any = {
     model: opts.model || 'deepseek-chat',
