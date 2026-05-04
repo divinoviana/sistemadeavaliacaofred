@@ -291,16 +291,24 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950 p-4 font-sans transition-colors duration-300">
-      <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 transition-colors duration-300">
+    <div className="min-h-screen flex items-center justify-center p-4 font-sans relative overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+      {/* Mesh gradient + blobs animados */}
+      <div className="absolute inset-0 bg-mesh-bg opacity-100 dark:opacity-30 pointer-events-none"></div>
+      <div className="absolute -top-32 -left-20 w-96 h-96 bg-vibe-pink/30 rounded-full blur-3xl animate-blob"></div>
+      <div className="absolute top-40 -right-24 w-96 h-96 bg-vibe-purple/30 rounded-full blur-3xl animate-blob" style={{ animationDelay: '2s' }}></div>
+      <div className="absolute -bottom-32 left-1/3 w-[28rem] h-[28rem] bg-vibe-cyan/30 rounded-full blur-3xl animate-blob" style={{ animationDelay: '4s' }}></div>
+
+      <div className="relative bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl p-8 rounded-[40px] shadow-2xl w-full max-w-md border border-white/50 dark:border-slate-800/50 transition-colors duration-300 z-10">
         <div className="text-center mb-8">
-          <div className="bg-tocantins-blue dark:bg-tocantins-yellow w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-100 dark:shadow-none">
-            <GraduationCap className="w-10 h-10 text-white dark:text-slate-950" />
+          <div className="bg-gradient-vibe w-20 h-20 rounded-[28px] flex items-center justify-center mx-auto mb-5 shadow-glow-purple animate-float">
+            <GraduationCap className="w-12 h-12 text-white drop-shadow-lg" strokeWidth={2.5} />
           </div>
-          <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">
-            {googleUserPending ? 'Completar Perfil' : isAdminLogin ? 'Acesso Administrativo' : isRegistering ? 'Novo Cadastro' : 'Portal do Aluno'}
+          <h2 className="text-3xl font-black uppercase tracking-tighter font-display">
+            <span className="text-gradient-vibe">
+              {googleUserPending ? 'Completar Perfil' : isAdminLogin ? 'Área Docente' : isRegistering ? 'Novo Cadastro' : 'Portal do Aluno'}
+            </span>
           </h2>
-          <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Ciências Humanas - Tocantins</p>
+          <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2">✨ Ciências Humanas · Tocantins</p>
         </div>
 
         {googleUserPending ? (
@@ -323,8 +331,8 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
                 </select>
             </div>
 
-            <button disabled={loading} className="w-full bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950 p-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-100 dark:shadow-none flex justify-center items-center gap-2 cursor-pointer active:scale-95 transition-all">
-              {loading ? <Loader2 className="animate-spin" /> : 'Concluir Cadastro'}
+            <button disabled={loading} className="w-full bg-gradient-vibe text-white p-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-glow-purple flex justify-center items-center gap-2 cursor-pointer active:scale-95 hover:scale-[1.02] hover:shadow-glow-pink transition-all disabled:opacity-50">
+              {loading ? <Loader2 className="animate-spin" /> : '✨ Concluir Cadastro'}
             </button>
             
             <button type="button" onClick={() => setGoogleUserPending(null)} className="w-full text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-4 hover:text-red-500 transition-colors">
@@ -347,8 +355,8 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
                 </div>
               </div>
 
-              <button disabled={loading} className="w-full bg-slate-900 dark:bg-tocantins-yellow text-white dark:text-slate-950 p-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex justify-center items-center gap-2 cursor-pointer active:scale-95 transition-all">
-                {loading ? <Loader2 className="animate-spin" /> : 'Acessar Painel'}
+              <button disabled={loading} className="w-full bg-gradient-cosmic text-white p-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-glow-purple flex justify-center items-center gap-2 cursor-pointer active:scale-95 hover:scale-[1.02] transition-all disabled:opacity-50">
+                {loading ? <Loader2 className="animate-spin" /> : '🔐 Acessar Painel'}
               </button>
 
               <div className="mt-8 text-center border-t dark:border-slate-800 pt-6">
@@ -461,8 +469,8 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
                 )}
               </div>
 
-              <button disabled={loading} className="w-full bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950 p-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-100 dark:shadow-none flex justify-center items-center gap-2 cursor-pointer active:scale-95 transition-all">
-                {loading ? <Loader2 className="animate-spin" /> : isRegistering ? 'Criar Minha Conta' : 'Entrar no Portal'}
+              <button disabled={loading} className="w-full bg-gradient-vibe text-white p-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-glow-purple flex justify-center items-center gap-2 cursor-pointer active:scale-95 hover:scale-[1.02] hover:shadow-glow-pink transition-all disabled:opacity-50">
+                {loading ? <Loader2 className="animate-spin" /> : isRegistering ? '🚀 Criar Minha Conta' : '✨ Entrar no Portal'}
               </button>
             </form>
 
