@@ -132,8 +132,10 @@ create table if not exists public.bimonthly_exams (
 );
 
 -- Garantia idempotente caso a tabela já exista sem essas colunas
-alter table public.bimonthly_exams add column if not exists title text;
-alter table public.bimonthly_exams add column if not exists school_class text;
+alter table public.bimonthly_exams add column if not exists title          text;
+alter table public.bimonthly_exams add column if not exists school_class   text;
+alter table public.bimonthly_exams add column if not exists topics         jsonb;
+alter table public.bimonthly_exams add column if not exists visual_content jsonb;
 
 create table if not exists public.teacher_profiles (
   id text primary key,

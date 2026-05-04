@@ -11,11 +11,13 @@
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 1) bimonthly_exams: title + school_class
+-- 1) bimonthly_exams: title + school_class + topics + visual_content
 -- ---------------------------------------------------------------------
 alter table public.bimonthly_exams
-  add column if not exists title         text,
-  add column if not exists school_class  text;
+  add column if not exists title          text,
+  add column if not exists school_class   text,
+  add column if not exists topics         jsonb,
+  add column if not exists visual_content jsonb;
 
 create index if not exists bimonthly_exams_grade_subject_idx
   on public.bimonthly_exams(grade, subject);

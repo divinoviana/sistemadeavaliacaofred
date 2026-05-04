@@ -886,24 +886,38 @@ export const AdminDashboard: React.FC = () => {
         topics: examTopics.split(',').map(t => t.trim()).filter(Boolean),
         questions: examQuestionsDraft,
       };
-      let { error } = await supabase.from('bimonthly_exams').insert(payload);
-      if (error && /title|school_class/i.test(error.message)) {
-        // Schema antigo — tenta sem as colunas novas
-        console.warn('Schema antigo detectado, removendo title/school_class:', error.message);
-        delete payload.title;
-        delete payload.school_class;
-        const retry = await supabase.from('bimonthly_exams').insert(payload);
-        error = retry.error;
-        if (!error) {
-          alert(
-            'Simulado publicado, mas em modo de compatibilidade.\n\n' +
-            '⚠️ Para usar título personalizado e segmentação por turma, ' +
-            'rode o script supabase/fix_all.sql no SQL Editor do Supabase.'
-          );
+
+      // Insere em modo "tolerante a schema": se uma coluna não existir,
+      // remove dinamicamente e tenta de novo. Cobre instalações que
+      // ainda não rodaram supabase/fix_all.sql.
+      const compatColumns: string[] = [];
+      let attempts = 0;
+      let lastError: any = null;
+      while (attempts < 6) {
+        const r = await supabase.from('bimonthly_exams').insert(payload);
+        if (!r.error) { lastError = null; break; }
+        lastError = r.error;
+        const m = String(r.error.message || '').match(/'([^']+)' column of/i);
+        const missingCol = m?.[1];
+        if (missingCol && (missingCol in payload)) {
+          console.warn(`[exam] coluna ${missingCol} faltando no schema — removendo do payload`);
+          compatColumns.push(missingCol);
+          delete payload[missingCol];
+          attempts++;
+        } else {
+          break;
         }
       }
-      if (error) throw error;
-      alert('Simulado publicado com sucesso! Os alunos já podem realizá-lo.');
+      if (lastError) throw lastError;
+
+      if (compatColumns.length > 0) {
+        alert(
+          `Simulado publicado em modo de compatibilidade (sem ${compatColumns.join(', ')}).\n\n` +
+          '⚠️ Para suportar todos os campos, rode supabase/fix_all.sql no SQL Editor do Supabase.'
+        );
+      } else {
+        alert('Simulado publicado com sucesso! Os alunos já podem realizá-lo.');
+      }
       // Reset
       setExamQuestionsDraft([]);
       setExamTitle('');
