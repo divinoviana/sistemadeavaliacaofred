@@ -16,41 +16,117 @@ import {
   Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, AlertTriangle, UserCircle, RotateCw
 } from 'lucide-react';
 
-// Avatar do aluno. Prefere a foto vinda como prop (já carregada em fetchStudents).
-// Cai pra query individual só se a foto não foi fornecida (ex.: viewingSubmission).
+// =====================================================================
+// Cache global de fotos + carregamento batched
+// =====================================================================
+// Cada photo_url é base64 de até 1.5 MB. Carregar 376 alunos
+// simultaneamente entupe a fila de conexões do navegador (~6 por host)
+// e bloqueia outras requests (incluindo o histórico de anotações).
+//
+// Solução em 3 camadas:
+//   1) IntersectionObserver — só busca fotos de cards visíveis na viewport
+//   2) Batch fetch — agrupa N pedidos em 1 query .in('id', [...])
+//   3) Cache global em Map — uma foto carregada nunca é re-buscada
+// =====================================================================
+const photoCache: Map<string, string | null> = new Map();
+const photoQueue: Set<string> = new Set();
+const photoSubscribers: Map<string, ((url: string | null) => void)[]> = new Map();
+let photoFlushTimer: any = null;
+
+function flushPhotoQueue() {
+  const ids = Array.from(photoQueue);
+  photoQueue.clear();
+  photoFlushTimer = null;
+  if (ids.length === 0) return;
+
+  // Lotes de 30 IDs (URL fica curta o suficiente; payload manejável)
+  const chunkSize = 30;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    supabase
+      .from('students')
+      .select('id,photo_url')
+      .in('id', chunk)
+      .then(({ data }) => {
+        const found = new Set<string>();
+        (data || []).forEach((row: any) => {
+          found.add(row.id);
+          photoCache.set(row.id, row.photo_url || null);
+          const subs = photoSubscribers.get(row.id) || [];
+          subs.forEach(cb => cb(row.photo_url || null));
+          photoSubscribers.delete(row.id);
+        });
+        // IDs do batch que não voltaram → marca como sem foto
+        chunk.forEach(id => {
+          if (!found.has(id)) {
+            photoCache.set(id, null);
+            const subs = photoSubscribers.get(id) || [];
+            subs.forEach(cb => cb(null));
+            photoSubscribers.delete(id);
+          }
+        });
+      });
+  }
+}
+
+function requestPhoto(studentId: string, callback: (url: string | null) => void): () => void {
+  let cancelled = false;
+  if (photoCache.has(studentId)) {
+    callback(photoCache.get(studentId) ?? null);
+    return () => { cancelled = true; };
+  }
+  const wrapped = (url: string | null) => { if (!cancelled) callback(url); };
+  if (!photoSubscribers.has(studentId)) photoSubscribers.set(studentId, []);
+  photoSubscribers.get(studentId)!.push(wrapped);
+  photoQueue.add(studentId);
+  if (photoFlushTimer) clearTimeout(photoFlushTimer);
+  photoFlushTimer = setTimeout(flushPhotoQueue, 250);
+  return () => { cancelled = true; };
+}
+
+// Avatar do aluno: lazy load via IntersectionObserver + batch fetch
 const StudentAvatar: React.FC<{ studentId?: string; studentName: string; photoUrl?: string | null }> = ({ studentId, studentName, photoUrl }) => {
+  const ref = React.useRef<HTMLDivElement>(null);
   const [photo, setPhoto] = useState<string | null>(photoUrl ?? null);
   const [loading, setLoading] = useState(!photoUrl && !!studentId);
 
   useEffect(() => {
-    if (photoUrl) {
-      setPhoto(photoUrl);
+    if (photoUrl) { setPhoto(photoUrl); setLoading(false); return; }
+    if (!studentId) { setLoading(false); return; }
+    if (photoCache.has(studentId)) {
+      setPhoto(photoCache.get(studentId) ?? null);
       setLoading(false);
       return;
     }
-    if (!studentId) {
-      setLoading(false);
-      return;
-    }
-    let isCancelled = false;
-    setLoading(true);
-    supabase
-      .from('students')
-      .select('photo_url')
-      .eq('id', studentId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!isCancelled && !error && data?.photo_url) setPhoto(data.photo_url);
-      })
-      .then(() => { if (!isCancelled) setLoading(false); });
-    return () => { isCancelled = true; };
+    if (!ref.current) return;
+    let cancelUnmount: (() => void) | null = null;
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        obs.disconnect();
+        cancelUnmount = requestPhoto(studentId, (url) => {
+          setPhoto(url);
+          setLoading(false);
+        });
+      }
+    }, { rootMargin: '300px' });
+    obs.observe(ref.current);
+    return () => {
+      obs.disconnect();
+      if (cancelUnmount) cancelUnmount();
+    };
   }, [studentId, photoUrl]);
 
-  if (loading) return <div className="w-full h-full bg-slate-100 dark:bg-slate-800 animate-pulse" />;
-  if (photo) return <img src={photo} alt={studentName} className="w-full h-full object-cover" />;
   return (
-    <div className="w-full h-full bg-tocantins-blue/10 dark:bg-tocantins-yellow/10 flex items-center justify-center text-tocantins-blue dark:text-tocantins-yellow font-black text-xl">
-      {studentName ? studentName.charAt(0) : '?'}
+    <div ref={ref} className="w-full h-full">
+      {loading ? (
+        <div className="w-full h-full bg-slate-100 dark:bg-slate-800 animate-pulse" />
+      ) : photo ? (
+        <img src={photo} alt={studentName} className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full bg-tocantins-blue/10 dark:bg-tocantins-yellow/10 flex items-center justify-center text-tocantins-blue dark:text-tocantins-yellow font-black text-xl">
+          {studentName ? studentName.charAt(0) : '?'}
+        </div>
+      )}
     </div>
   );
 };
