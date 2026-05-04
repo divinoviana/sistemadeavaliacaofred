@@ -588,22 +588,44 @@ export const AdminDashboard: React.FC = () => {
     setIsSendingReply(true);
     try {
       const studentObj = students.find(s => s.id === selectedChatStudentId);
-      const studentName = studentObj?.name || 'Estudante';
-      const { error } = await supabase.from('messages').insert({
+      // Schema real de messages:
+      //   sender_id, sender_name, receiver_id (opcional), school_class, grade,
+      //   content, is_from_teacher, subject, read_at, created_at
+      // (NÃO tem student_id/student_name — esses campos foram removidos)
+      const payload: any = {
         sender_id: student?.id,
         sender_name: student?.name || 'Professor',
         receiver_id: selectedChatStudentId,
-        student_name: studentName,
         school_class: studentObj?.school_class || null,
         grade: studentObj?.grade || null,
-        content: teacherReplyText,
+        content: teacherReplyText.trim(),
         is_from_teacher: true,
         subject: teacherSubject || 'Geral',
-      });
-      if (error) throw error;
+      };
+
+      // Tolerante a schemas variantes — se receiver_id ou outra coluna faltar,
+      // remove e tenta de novo (até 4 tentativas)
+      let attempts = 0;
+      let lastError: any = null;
+      while (attempts < 4) {
+        const r = await supabase.from('messages').insert(payload);
+        if (!r.error) { lastError = null; break; }
+        lastError = r.error;
+        const m = String(r.error.message || '').match(/'([^']+)' column of/i);
+        const missingCol = m?.[1];
+        if (missingCol && (missingCol in payload)) {
+          console.warn(`[messages] coluna ${missingCol} faltando — removendo`);
+          delete payload[missingCol];
+          attempts++;
+        } else {
+          break;
+        }
+      }
+      if (lastError) throw lastError;
       setTeacherReplyText('');
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao enviar mensagem:", err);
+      alert("Não foi possível enviar a mensagem: " + (err?.message || ''));
     } finally {
       setIsSendingReply(false);
     }
