@@ -345,17 +345,37 @@ export const AdminDashboard: React.FC = () => {
     setNewNoteText('');
     setStudentNotes([]);
     setIsLoadingNotes(true);
+    const t0 = Date.now();
     try {
-      const { data, error } = await supabase
+      // Trazer só as colunas que precisamos + limite máximo (proteção contra
+      // alunos com centenas de anotações antigas).
+      const queryPromise = supabase
         .from('student_notes')
-        .select('*')
+        .select('id,student_id,subject,teacher_subject,category,content,created_at')
         .eq('student_id', st.id)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setStudentNotes(data || []);
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Tempo esgotado ao carregar anotações (8s).')), 8000)
+      );
+
+      const result: any = await Promise.race([queryPromise, timeoutPromise]);
+      console.log(`[notes] fetch em ${Date.now() - t0}ms, count: ${result?.data?.length}`);
+
+      if (result.error) throw result.error;
+      setStudentNotes(result.data || []);
     } catch (e: any) {
       console.error('Erro ao buscar anotações:', e);
-      alert('Não foi possível carregar as anotações: ' + (e?.message || ''));
+      // Não bloqueia o usuário — abre o modal mesmo assim para ele poder criar
+      // novas anotações. Só avisa do problema com o histórico.
+      const msg = e?.message || 'erro desconhecido';
+      if (msg.includes('Tempo esgotado')) {
+        alert('Histórico demorou demais para carregar. Você pode adicionar novas anotações normalmente — recarregue a página depois para ver as antigas.');
+      } else {
+        alert('Não foi possível carregar o histórico: ' + msg);
+      }
+      setStudentNotes([]);
     } finally {
       setIsLoadingNotes(false);
     }
@@ -363,9 +383,12 @@ export const AdminDashboard: React.FC = () => {
 
   /** Insert com timeout de 10s — se a request travar, não fica spinner pra sempre. */
   async function insertNoteWithTimeout(payload: any): Promise<any> {
+    const t0 = Date.now();
     const insertPromise = supabase.from('student_notes').insert(payload).select('*').single();
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo esgotado (10s). Verifique sua conexão.')), 10000));
-    return Promise.race([insertPromise, timeout]);
+    const result: any = await Promise.race([insertPromise, timeout]);
+    console.log(`[notes] insert em ${Date.now() - t0}ms`, result?.error ? '❌ ' + result.error.message : '✅');
+    return result;
   }
 
   const handleAddNote = async (category?: string) => {
@@ -2353,13 +2376,22 @@ export const AdminDashboard: React.FC = () => {
                   <ClipboardList size={14} /> Histórico — {activeCat.label} ({activeNotes.length})
                 </h4>
                 {isLoadingNotes ? (
-                  <div className="text-center py-12">
-                    <Loader2 className="animate-spin mx-auto text-tocantins-blue dark:text-tocantins-yellow" />
+                  <div className="text-center py-12 flex flex-col items-center gap-3">
+                    <Loader2 className="animate-spin text-tocantins-blue dark:text-tocantins-yellow" />
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Carregando histórico...</p>
                   </div>
                 ) : activeNotes.length === 0 ? (
-                  <p className="text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest py-8">
-                    Nenhuma anotação de {activeCat.label.toLowerCase()} ainda. Use o formulário acima para registrar.
-                  </p>
+                  <div className="text-center py-8 space-y-3">
+                    <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">
+                      Nenhuma anotação de {activeCat.label.toLowerCase()} ainda. Use o formulário acima para registrar.
+                    </p>
+                    <button
+                      onClick={() => openNotesModal(notesModalStudent)}
+                      className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest hover:underline cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <RotateCw size={12} /> Recarregar histórico
+                    </button>
+                  </div>
                 ) : (
                   activeNotes
                     .slice()
