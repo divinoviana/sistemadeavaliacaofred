@@ -361,52 +361,53 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleAddNote = async () => {
+  /** Insert com timeout de 10s — se a request travar, não fica spinner pra sempre. */
+  async function insertNoteWithTimeout(payload: any): Promise<any> {
+    const insertPromise = supabase.from('student_notes').insert(payload).select('*').single();
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo esgotado (10s). Verifique sua conexão.')), 10000));
+    return Promise.race([insertPromise, timeout]);
+  }
+
+  const handleAddNote = async (category?: string) => {
     if (!notesModalStudent || !newNoteText.trim() || isSavingNote) return;
+    const targetCategory = category || newNoteCategory;
     setIsSavingNote(true);
     try {
       const subjectTag = teacherSubject || 'geral';
-      // Envia em colunas separadas (category) + ambos os nomes possíveis
-      // de matéria (subject e teacher_subject) para máxima compatibilidade
-      // com diferentes versões do schema.
       const payload: any = {
         student_id: notesModalStudent.id,
-        category: newNoteCategory,
+        category: targetCategory,
         subject: subjectTag,
         teacher_subject: subjectTag,
         content: newNoteText.trim(),
       };
-      const { data, error } = await supabase
-        .from('student_notes')
-        .insert(payload)
-        .select('*')
-        .single();
-      if (error) {
-        // Fallback: se a coluna teacher_subject não existir, tenta sem ela
-        if (/teacher_subject/i.test(error.message)) {
+
+      let result: any = await insertNoteWithTimeout(payload);
+
+      // Fallback inteligente: se erro de schema, retenta sem o campo problemático
+      if (result.error) {
+        const msg = result.error.message || '';
+        if (/teacher_subject/i.test(msg)) {
           delete payload.teacher_subject;
-          const retry = await supabase.from('student_notes').insert(payload).select('*').single();
-          if (retry.error) throw retry.error;
-          setStudentNotes([retry.data, ...studentNotes]);
-        } else if (/category/i.test(error.message)) {
-          // Schema ainda sem `category`: grave no formato antigo
+          result = await insertNoteWithTimeout(payload);
+        } else if (/category/i.test(msg)) {
           const legacy = {
             student_id: notesModalStudent.id,
             subject: subjectTag,
             teacher_subject: subjectTag,
-            content: `[${newNoteCategory}] ${newNoteText.trim()}`,
+            content: `[${targetCategory}] ${newNoteText.trim()}`,
           };
-          const retry = await supabase.from('student_notes').insert(legacy).select('*').single();
-          if (retry.error) throw retry.error;
-          setStudentNotes([retry.data, ...studentNotes]);
-        } else {
-          throw error;
+          result = await insertNoteWithTimeout(legacy);
+        } else if (/subject/i.test(msg)) {
+          delete payload.subject;
+          result = await insertNoteWithTimeout(payload);
         }
-      } else {
-        setStudentNotes([data, ...studentNotes]);
       }
+
+      if (result.error) throw result.error;
+      setStudentNotes([result.data, ...studentNotes]);
       setNewNoteText('');
-      setNewNoteCategory('comportamento');
+      // mantém a categoria selecionada para o prof poder fazer várias da mesma seguidas
     } catch (e: any) {
       console.error('Erro ao salvar anotação:', e);
       alert('Não foi possível salvar: ' + (e?.message || 'tente novamente.'));
@@ -2237,132 +2238,156 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Anotações sobre o Estudante */}
-      {notesModalStudent && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
-            <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-md ring-4 ring-white dark:ring-slate-900">
-                  <StudentAvatar studentId={notesModalStudent.id} studentName={notesModalStudent.name} />
+      {/* Modal: Anotações sobre o Estudante — agora com 5 abas independentes */}
+      {notesModalStudent && (() => {
+        const CATEGORIES = [
+          { v: 'comportamento', label: 'Comportamento', emoji: '🟡', color: 'amber',   placeholder: 'Ex.: Conversa muito durante a aula, mexe no celular durante explicações.' },
+          { v: 'destaque',      label: 'Destaque',      emoji: '🟢', color: 'emerald', placeholder: 'Ex.: Excelente argumentação no debate, lidera trabalhos em grupo.' },
+          { v: 'pedagogico',    label: 'Pedagógico',    emoji: '🔵', color: 'blue',    placeholder: 'Ex.: Não entrega tarefas no prazo, dificuldade em interpretação de texto.' },
+          { v: 'familiar',      label: 'Familiar',      emoji: '🟣', color: 'purple',  placeholder: 'Ex.: Pais separados há pouco tempo, cuida do irmão menor.' },
+          { v: 'saude',         label: 'Saúde',         emoji: '🔴', color: 'red',     placeholder: 'Ex.: Possui laudo de TDAH, faz uso de medicamento controlado.' },
+        ] as const;
+
+        const colorClasses: Record<string, { bg: string; text: string; ring: string; tab: string; border: string; }> = {
+          amber:   { bg: 'bg-amber-50 dark:bg-amber-900/10',     text: 'text-amber-600 dark:text-amber-400',     ring: 'ring-amber-200 dark:ring-amber-800',     tab: 'bg-amber-500',     border: 'border-amber-200 dark:border-amber-800/40' },
+          emerald: { bg: 'bg-emerald-50 dark:bg-emerald-900/10', text: 'text-emerald-600 dark:text-emerald-400', ring: 'ring-emerald-200 dark:ring-emerald-800', tab: 'bg-emerald-500',   border: 'border-emerald-200 dark:border-emerald-800/40' },
+          blue:    { bg: 'bg-blue-50 dark:bg-blue-900/10',       text: 'text-blue-600 dark:text-blue-400',       ring: 'ring-blue-200 dark:ring-blue-800',       tab: 'bg-blue-500',      border: 'border-blue-200 dark:border-blue-800/40' },
+          purple:  { bg: 'bg-purple-50 dark:bg-purple-900/10',   text: 'text-purple-600 dark:text-purple-400',   ring: 'ring-purple-200 dark:ring-purple-800',   tab: 'bg-purple-500',    border: 'border-purple-200 dark:border-purple-800/40' },
+          red:     { bg: 'bg-red-50 dark:bg-red-900/10',         text: 'text-red-600 dark:text-red-400',         ring: 'ring-red-200 dark:ring-red-800',         tab: 'bg-red-500',       border: 'border-red-200 dark:border-red-800/40' },
+        };
+
+        // Agrupa as anotações por categoria
+        const grouped: Record<string, any[]> = { comportamento: [], destaque: [], pedagogico: [], familiar: [], saude: [] };
+        studentNotes.forEach((note: any) => {
+          let cat: string = note.category || '';
+          let content: string = note.content || '';
+          if (!cat) {
+            const m = String(content).match(/^\[([^\]]+)\]\s*(.*)$/s);
+            if (m) { cat = m[1]; content = m[2]; }
+          }
+          cat = (cat || 'comportamento').toLowerCase();
+          if (!grouped[cat]) grouped[cat] = [];
+          grouped[cat].push({ ...note, _category: cat, _content: content });
+        });
+
+        const activeCat = CATEGORIES.find(c => c.v === newNoteCategory) || CATEGORIES[0];
+        const activeColors = colorClasses[activeCat.color];
+        const activeNotes = grouped[activeCat.v] || [];
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Header */}
+              <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-md ring-4 ring-white dark:ring-slate-900">
+                    <StudentAvatar studentId={notesModalStudent.id} studentName={notesModalStudent.name} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg leading-tight">{notesModalStudent.name}</h3>
+                    <p className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest mt-1">
+                      {notesModalStudent.grade}ª Série • Turma {notesModalStudent.school_class} • {studentNotes.length} {studentNotes.length === 1 ? 'anotação' : 'anotações'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg leading-tight">{notesModalStudent.name}</h3>
-                  <p className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest mt-1">
-                    {notesModalStudent.grade}ª Série • Turma {notesModalStudent.school_class}
-                  </p>
+                <button onClick={() => setNotesModalStudent(null)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-500 hover:text-red-500 transition-all cursor-pointer hover:rotate-90 duration-300">
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Abas das categorias */}
+              <div className="px-6 pt-4 border-b dark:border-slate-800 bg-white dark:bg-slate-900">
+                <div className="flex gap-1 overflow-x-auto -mb-px">
+                  {CATEGORIES.map(c => {
+                    const count = grouped[c.v]?.length || 0;
+                    const isActive = newNoteCategory === c.v;
+                    const colors = colorClasses[c.color];
+                    return (
+                      <button
+                        key={c.v}
+                        onClick={() => setNewNoteCategory(c.v as any)}
+                        className={`flex items-center gap-2 px-4 py-3 rounded-t-xl text-[10px] font-black uppercase tracking-widest border-b-2 transition-all whitespace-nowrap ${
+                          isActive
+                            ? `${colors.bg} ${colors.text} border-current shadow-sm`
+                            : 'border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span>{c.emoji}</span>
+                        <span>{c.label}</span>
+                        {count > 0 && (
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] ${isActive ? colors.tab + ' text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              <button onClick={() => setNotesModalStudent(null)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-500 hover:text-red-500 transition-all cursor-pointer hover:rotate-90 duration-300">
-                <X size={20} />
-              </button>
-            </div>
 
-            {/* Form de nova anotação */}
-            <div className="p-6 border-b dark:border-slate-800 bg-white dark:bg-slate-900">
-              <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-xs tracking-tight mb-4 flex items-center gap-2">
-                <Pencil size={14} /> Nova Anotação
-              </h4>
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  {([
-                    { v: 'comportamento', label: 'Comportamento' },
-                    { v: 'destaque', label: 'Destaque' },
-                    { v: 'pedagogico', label: 'Pedagógico' },
-                    { v: 'familiar', label: 'Familiar' },
-                    { v: 'saude', label: 'Saúde' },
-                  ] as const).map(c => (
-                    <button
-                      key={c.v}
-                      onClick={() => setNewNoteCategory(c.v)}
-                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                        newNoteCategory === c.v
-                          ? 'bg-tocantins-blue text-white border-tocantins-blue shadow-md'
-                          : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:border-tocantins-blue/40'
-                      }`}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
+              {/* Form de nova anotação na categoria ativa */}
+              <div className={`p-6 border-b dark:border-slate-800 ${activeColors.bg}`}>
+                <h4 className={`font-black uppercase text-xs tracking-tight mb-3 flex items-center gap-2 ${activeColors.text}`}>
+                  <Pencil size={14} /> Nova anotação em <span className="font-black">{activeCat.label}</span>
+                </h4>
                 <textarea
                   value={newNoteText}
                   onChange={e => setNewNoteText(e.target.value)}
-                  placeholder="Ex.: Conversa muito durante a aula, mexe no celular durante explicações."
+                  placeholder={activeCat.placeholder}
                   rows={3}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
+                  className="w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-slate-200 dark:focus:ring-slate-700 mb-3"
                 />
                 <button
-                  onClick={handleAddNote}
+                  onClick={() => handleAddNote(activeCat.v)}
                   disabled={isSavingNote || !newNoteText.trim()}
-                  className="w-full bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-800 dark:hover:bg-amber-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                  className={`w-full ${activeColors.tab} text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-md`}
                 >
                   {isSavingNote ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  Salvar Anotação
+                  Salvar em {activeCat.label}
                 </button>
               </div>
-            </div>
 
-            {/* Lista de anotações existentes */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-3 bg-slate-50/30 dark:bg-slate-950/30">
-              <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-xs tracking-tight mb-3 flex items-center gap-2">
-                <ClipboardList size={14} /> Histórico de Anotações ({studentNotes.length})
-              </h4>
-              {isLoadingNotes ? (
-                <div className="text-center py-12">
-                  <Loader2 className="animate-spin mx-auto text-tocantins-blue dark:text-tocantins-yellow" />
-                </div>
-              ) : studentNotes.length === 0 ? (
-                <p className="text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest py-8">
-                  Nenhuma anotação registrada ainda.
-                </p>
-              ) : (
-                studentNotes.map((note: any) => {
-                  // Prefere a coluna category (nova). Fallback para regex em
-                  // anotações antigas no formato "[categoria] texto".
-                  let category: string = note.category || '';
-                  let content: string = note.content || '';
-                  if (!category) {
-                    const m = String(content).match(/^\[([^\]]+)\]\s*(.*)$/s);
-                    if (m) { category = m[1]; content = m[2]; }
-                  }
-                  category = (category || 'geral').toLowerCase();
-                  const colorMap: Record<string, string> = {
-                    comportamento: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
-                    destaque: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
-                    pedagogico: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
-                    familiar: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
-                    saude: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
-                  };
-                  return (
-                    <div key={note.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 group">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest ${colorMap[category] || 'bg-slate-100 dark:bg-slate-700 text-slate-600'}`}>
-                            {category}
-                          </span>
+              {/* Histórico SÓ da categoria ativa */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-3 bg-slate-50/30 dark:bg-slate-950/30">
+                <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-xs tracking-tight mb-3 flex items-center gap-2">
+                  <ClipboardList size={14} /> Histórico — {activeCat.label} ({activeNotes.length})
+                </h4>
+                {isLoadingNotes ? (
+                  <div className="text-center py-12">
+                    <Loader2 className="animate-spin mx-auto text-tocantins-blue dark:text-tocantins-yellow" />
+                  </div>
+                ) : activeNotes.length === 0 ? (
+                  <p className="text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest py-8">
+                    Nenhuma anotação de {activeCat.label.toLowerCase()} ainda. Use o formulário acima para registrar.
+                  </p>
+                ) : (
+                  activeNotes
+                    .slice()
+                    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+                    .map((note: any) => (
+                      <div key={note.id} className={`bg-white dark:bg-slate-800 p-4 rounded-2xl border ${activeColors.border} group hover:shadow-md transition-all`}>
+                        <div className="flex items-start justify-between gap-3 mb-2">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                            {note.subject && `${note.subject} • `}
+                            {(note.subject || note.teacher_subject) && `${note.subject || note.teacher_subject} • `}
                             {note.created_at ? new Date(note.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                           </span>
+                          <button
+                            onClick={() => handleDeleteNote(note.id)}
+                            className="p-1.5 text-red-300 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
+                            title="Excluir anotação"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
-                        <button
-                          onClick={() => handleDeleteNote(note.id)}
-                          className="p-1.5 text-red-300 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                          title="Excluir anotação"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">{note._content}</p>
                       </div>
-                      <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">{content}</p>
-                    </div>
-                  );
-                })
-              )}
+                    ))
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal: Configurações do Estudante */}
       {settingsModalStudent && (
