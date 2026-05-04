@@ -113,38 +113,47 @@ export const GradeView: React.FC = () => {
   if (!grade || !subject) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 animate-in fade-in duration-500 pb-20">
-      <div className={`${subject.color} py-16 text-white shadow-inner`}>
-        <div className="container mx-auto px-4 max-w-4xl">
-          <Link to="/" className="flex items-center gap-2 text-white/80 hover:text-white mb-6 text-sm font-bold transition-all">
-            <ArrowLeft size={16}/> Mudar Disciplina
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 animate-in fade-in duration-500 pb-20 relative overflow-hidden">
+      <div className="absolute inset-0 bg-mesh-bg opacity-50 dark:opacity-15 pointer-events-none"></div>
+
+      <div className={`relative ${subject.gradient || subject.color} py-20 text-white overflow-hidden`}>
+        {/* Blobs decorativos no header */}
+        <div className="absolute top-0 right-0 w-72 h-72 bg-white/20 rounded-full blur-3xl animate-blob"></div>
+        <div className="absolute -bottom-20 left-1/4 w-72 h-72 bg-black/10 rounded-full blur-3xl animate-blob" style={{ animationDelay: '3s' }}></div>
+
+        <div className="container mx-auto px-4 max-w-4xl relative z-10">
+          <Link to="/" className="inline-flex items-center gap-2 text-white/90 hover:text-white mb-6 text-xs font-black tracking-widest uppercase bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full backdrop-blur-md transition-all hover:scale-105">
+            <ArrowLeft size={14}/> Mudar Disciplina
           </Link>
           <div className="flex items-center gap-6">
-             <div className="w-20 h-20 bg-white/20 rounded-[30px] flex items-center justify-center text-4xl shadow-inner border border-white/20 backdrop-blur-sm">
+             <div className="w-24 h-24 bg-white/20 rounded-[32px] flex items-center justify-center text-5xl shadow-2xl border border-white/20 backdrop-blur-md animate-float">
                 {subject.icon}
              </div>
              <div>
-                <h1 className="text-3xl font-black uppercase tracking-tighter">{subject.name} - {grade.title}</h1>
-                <p className="text-white/70 font-medium uppercase tracking-widest text-[10px]">Portal de Conteúdo e Avaliação</p>
+                <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/70 mb-2">📚 Disciplina</p>
+                <h1 className="text-4xl md:text-5xl font-black tracking-tighter font-display drop-shadow-lg">{subject.name}</h1>
+                <p className="text-white/80 font-bold uppercase tracking-widest text-[11px] mt-1">{grade.title} · Conteúdo e Avaliações</p>
              </div>
           </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-12 max-w-4xl -mt-10">
+      <div className="container mx-auto px-4 py-12 max-w-4xl -mt-10 relative z-10">
         <div className="space-y-12">
-          
+
           {(exams.length > 0 || loadingExams) && (
             <section className="animate-in slide-in-from-bottom-4 duration-700">
               <div className="flex items-center gap-2 mb-6 ml-2">
-                <Award className="text-tocantins-blue" size={20} />
-                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Avaliação Bimestral Disponível</h2>
+                <Award className="text-vibe-purple" size={22} />
+                <h2 className="text-2xl font-black tracking-tighter font-display">
+                  <span className="text-gradient-cosmic">🎯 Avaliação Bimestral</span>
+                </h2>
               </div>
-              
+
               <div className="grid grid-cols-1 gap-4">
                 {loadingExams ? (
-                  <div className="bg-white p-8 rounded-[32px] border border-dashed flex items-center justify-center gap-3 text-slate-400 font-bold">
-                    <Clock className="animate-spin" size={18}/> Sincronizando...
+                  <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] border-2 border-dashed border-vibe-purple/30 flex items-center justify-center gap-3 text-slate-400 font-bold">
+                    <Clock className="animate-spin text-vibe-purple" size={18}/> Sincronizando…
                   </div>
                 ) : (
                   exams.map(exam => {
@@ -152,15 +161,16 @@ export const GradeView: React.FC = () => {
                     const isDone = userSubmissions.includes(exam.id) || userSubmissions.includes(examTitle);
 
                     return (
-                      <Link 
-                        key={exam.id} 
+                      <Link
+                        key={exam.id}
                         to={isDone ? "#" : `/evaluation/${exam.id}`}
-                        className={`bg-white p-6 rounded-[32px] shadow-lg border-2 transition-all flex items-center justify-between group ${isDone ? 'border-green-100 opacity-80 cursor-default grayscale' : 'border-indigo-50 hover:border-indigo-400 hover:-translate-y-1'}`}
+                        className={`relative overflow-hidden rounded-[32px] p-1 transition-all group ${isDone ? 'bg-slate-200/60 dark:bg-slate-800/60 opacity-80 cursor-default grayscale' : 'bg-gradient-cosmic shadow-glow-purple hover:-translate-y-1 hover:scale-[1.01]'}`}
                         onClick={(e) => isDone && e.preventDefault()}
                       >
+                       <div className="bg-white dark:bg-slate-900 p-6 rounded-[28px] flex items-center justify-between">
                          <div className="flex items-center gap-5">
-                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${isDone ? 'bg-slate-200 text-slate-500' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'}`}>
-                               {isDone ? <Lock size={28}/> : <BrainCircuit size={28}/>}
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-6 ${isDone ? 'bg-slate-200 text-slate-500' : 'bg-gradient-cosmic text-white shadow-glow-purple'}`}>
+                               {isDone ? <Lock size={26}/> : <BrainCircuit size={26}/>}
                             </div>
                             <div>
                                <h4 className="font-black text-slate-800 uppercase tracking-tight text-sm">
@@ -173,14 +183,15 @@ export const GradeView: React.FC = () => {
                          </div>
                          <div className="flex items-center gap-4">
                             {isDone ? (
-                              <span className="bg-slate-100 text-slate-500 px-4 py-2 rounded-full text-[10px] font-black uppercase">Realizada</span>
+                              <span className="bg-slate-100 text-slate-500 px-4 py-2 rounded-full text-[10px] font-black uppercase">✓ Realizada</span>
                             ) : (
                               <>
-                                <span className="hidden sm:block text-[10px] font-black text-indigo-500 uppercase">Fazer Agora</span>
-                                <ChevronRight className="text-indigo-200 group-hover:text-indigo-500 transition-colors" />
+                                <span className="hidden sm:inline-flex bg-gradient-cosmic text-white px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-md">🚀 Fazer Agora</span>
+                                <ChevronRight className="text-vibe-purple/40 group-hover:text-vibe-pink group-hover:translate-x-1 transition-all" />
                               </>
                             )}
                          </div>
+                       </div>
                       </Link>
                     );
                   })
@@ -191,8 +202,10 @@ export const GradeView: React.FC = () => {
 
           <section>
             <div className="flex items-center gap-2 mb-6 ml-2">
-              <Book className="text-slate-400" size={20} />
-              <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Roteiro de Estudos</h2>
+              <Book className="text-vibe-cyan" size={22} />
+              <h2 className="text-2xl font-black tracking-tighter font-display">
+                <span className="text-gradient-aurora">📖 Roteiro de Estudos</span>
+              </h2>
             </div>
             
             <div className="space-y-8">
@@ -205,34 +218,35 @@ export const GradeView: React.FC = () => {
                 const displayTitle = bimester.subjectTitles?.[subjectKey] || bimester.title;
 
                 return (
-                  <div key={bimester.id} className="bg-white rounded-[40px] shadow-xl border border-slate-100 overflow-hidden">
-                    <div className="bg-slate-50 px-8 py-5 border-b flex justify-between items-center">
-                       <h3 className="font-black text-slate-800 text-xs uppercase tracking-widest">{displayTitle}</h3>
-                       <span className="bg-white px-3 py-1 rounded-full text-[9px] font-black text-slate-400 border border-slate-200">{filteredLessons.length} Aulas</span>
-                    </div>
-                    <div className="divide-y divide-slate-50">
-                      {filteredLessons.map((lesson) => {
-                        const isPublished = publishedLessonIds.includes(lesson.id);
-                        const isLessonDone = userSubmissions.includes(lesson.id) || userSubmissions.includes(lesson.title.trim());
-                        
-                        // Oculta se não estiver publicado (fator "apagar conteúdos antigos")
-                        if (!isPublished) return null;
+                  <div key={bimester.id} className={`relative overflow-hidden ${subject.gradient || subject.color} p-1 rounded-[40px] shadow-lg`}>
+                    <div className="bg-white dark:bg-slate-900 rounded-[36px] overflow-hidden">
+                      <div className="bg-slate-50/70 dark:bg-slate-800/50 px-8 py-5 border-b dark:border-slate-800 flex justify-between items-center">
+                         <h3 className="font-black text-slate-800 dark:text-slate-100 text-xs uppercase tracking-[0.25em]">{displayTitle}</h3>
+                         <span className="bg-gradient-vibe text-white px-3 py-1.5 rounded-full text-[9px] font-black tracking-widest shadow-md">{publishedInBimester.length} aulas 🔥</span>
+                      </div>
+                      <div className="divide-y divide-slate-50 dark:divide-slate-800">
+                        {filteredLessons.map((lesson) => {
+                          const isPublished = publishedLessonIds.includes(lesson.id);
+                          const isLessonDone = userSubmissions.includes(lesson.id) || userSubmissions.includes(lesson.title.trim());
 
-                        return (
-                          <Link key={lesson.id} to={`/lesson/${lesson.id}`} className="flex items-center p-6 hover:bg-slate-50/80 transition group">
-                             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all mr-5 ${isLessonDone ? 'bg-green-50 text-green-500' : 'bg-slate-100 text-slate-400 group-hover:bg-tocantins-blue group-hover:text-white group-hover:rotate-6'}`}>
-                               {isLessonDone ? <CheckCircle2 size={20}/> : <Book size={20}/>}
-                             </div>
-                             <div className="flex-1">
-                                <span className={`font-bold text-sm block transition-colors ${isLessonDone ? 'text-slate-400' : 'text-slate-700 group-hover:text-tocantins-blue'}`}>
-                                  {lesson.title}
-                                </span>
-                                {isLessonDone && <span className="text-[9px] font-black text-green-500 uppercase tracking-widest">Atividade entregue</span>}
-                             </div>
-                             <ChevronRight size={18} className="text-slate-200 group-hover:text-tocantins-blue transition-all group-hover:translate-x-1"/>
-                          </Link>
-                        );
-                      })}
+                          if (!isPublished) return null;
+
+                          return (
+                            <Link key={lesson.id} to={`/lesson/${lesson.id}`} className="flex items-center p-6 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition group">
+                               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all mr-5 ${isLessonDone ? 'bg-vibe-lime/20 text-vibe-lime' : `bg-slate-100 dark:bg-slate-800 text-slate-400 group-hover:${subject.gradient || subject.color} group-hover:text-white group-hover:rotate-6 group-hover:scale-110`}`}>
+                                 {isLessonDone ? <CheckCircle2 size={20}/> : <Book size={20}/>}
+                               </div>
+                               <div className="flex-1">
+                                  <span className={`font-bold text-sm block transition-colors ${isLessonDone ? 'text-slate-400' : 'text-slate-700 dark:text-slate-200 group-hover:text-vibe-pink'}`}>
+                                    {lesson.title}
+                                  </span>
+                                  {isLessonDone && <span className="text-[9px] font-black text-vibe-lime uppercase tracking-widest">✓ Atividade entregue</span>}
+                               </div>
+                               <ChevronRight size={18} className="text-slate-200 dark:text-slate-700 group-hover:text-vibe-pink transition-all group-hover:translate-x-1"/>
+                            </Link>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 );

@@ -111,30 +111,30 @@ export const SubmissionBar: React.FC<Props> = ({
     <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-200 p-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-50">
       <div className="container mx-auto max-w-3xl flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className={`p-2.5 rounded-2xl transition-all duration-500 ${dbStatus === 'saved' ? 'bg-green-100 text-green-600 scale-110' : 'bg-slate-100 text-slate-400'}`}>
+          <div className={`p-3 rounded-2xl transition-all duration-500 ${dbStatus === 'saved' ? 'bg-vibe-lime/20 text-vibe-lime scale-110 shadow-glow-lime' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
             {dbStatus === 'saved' ? <CheckCircle size={22}/> : <Database size={22}/>}
           </div>
           <div className="hidden sm:block">
-            <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1 tracking-widest">Sincronização</p>
-            <p className="text-xs font-bold text-slate-600">
-              {dbStatus === 'saving' ? 'Gravando no servidor...' : 
-               dbStatus === 'saved' ? 'Atividade Sincronizada!' : 
-               dbStatus === 'error' ? 'Falha na Gravação' : `Sincronizar c/ Prof. de ${subject}`}
+            <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1 tracking-[0.25em]">Sincronização</p>
+            <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
+              {dbStatus === 'saving' ? '⏳ Gravando…' :
+               dbStatus === 'saved' ? '✅ Sincronizada!' :
+               dbStatus === 'error' ? '⚠️ Falha na gravação' : `Pronto pra enviar ao Prof. de ${subject}`}
             </p>
           </div>
         </div>
 
-        <button 
-          onClick={handleInternalSend} 
-          disabled={isGenerating || dbStatus === 'saved'} 
-          className={`relative overflow-hidden font-bold py-3.5 px-8 rounded-2xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-lg ${
-            dbStatus === 'saved' 
-            ? 'bg-green-600 text-white cursor-default' 
-            : 'bg-tocantins-blue hover:bg-blue-800 text-white cursor-pointer'
+        <button
+          onClick={handleInternalSend}
+          disabled={isGenerating || dbStatus === 'saved'}
+          className={`relative overflow-hidden font-black py-4 px-8 rounded-2xl flex items-center gap-2 transition-all active:scale-95 hover:scale-[1.03] disabled:opacity-50 ${
+            dbStatus === 'saved'
+              ? 'bg-vibe-lime text-slate-950 cursor-default shadow-glow-lime'
+              : 'bg-gradient-vibe text-white cursor-pointer shadow-glow-purple hover:shadow-glow-pink'
           }`}
         >
           {isGenerating ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>}
-          <span>{dbStatus === 'saved' ? 'Atividade Enviada' : 'Finalizar e Enviar Atividade'}</span>
+          <span className="text-sm tracking-tight">{dbStatus === 'saved' ? 'Enviada ✓' : '🚀 Enviar Atividade'}</span>
         </button>
       </div>
     </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { curriculumData } from '../data';
+import { curriculumData, subjectsInfo } from '../data';
 import { ActivityInput } from '../components/ActivityInput';
 import { SubmissionBar, SubmissionItem } from '../components/SubmissionBar';
 import { ArrowLeft, BookOpen, PenTool, Sparkles, Home, Loader2, ListChecks, HelpCircle, CheckCircle2 } from 'lucide-react';
@@ -253,31 +253,40 @@ export const LessonView: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-32 animate-in fade-in duration-500 transition-colors duration-300">
       <AIFeedbackModal isOpen={isAIModalOpen} isLoading={aiLoading} data={aiData} onClose={() => setIsAIModalOpen(false)} />
       
-      <div className="relative h-60 w-full overflow-hidden bg-slate-800 dark:bg-slate-950">
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/30 to-slate-50 dark:to-slate-950"></div>
+      <div className={`relative h-72 w-full overflow-hidden ${subjectsInfo[foundLesson.subject]?.gradient || subjectsInfo[foundLesson.subject]?.color || 'bg-slate-800'}`}>
+        {/* Blobs decorativos */}
+        <div className="absolute top-0 right-1/4 w-72 h-72 bg-white/20 rounded-full blur-3xl animate-blob"></div>
+        <div className="absolute -bottom-20 left-1/4 w-72 h-72 bg-black/10 rounded-full blur-3xl animate-blob" style={{ animationDelay: '3s' }}></div>
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-50/30 dark:to-slate-950/40"></div>
+
         <div className="relative z-10 container mx-auto px-4 h-full flex flex-col justify-center max-w-4xl">
            <div className="flex gap-2 mb-4">
-              <Link to="/" className="inline-flex items-center text-white/90 bg-black/30 hover:bg-black/50 px-4 py-2 rounded-full backdrop-blur-md transition-colors border border-white/10 text-sm font-bold">
-                <Home className="w-4 h-4 mr-2" /> Início
+              <Link to="/" className="inline-flex items-center text-white/95 bg-black/30 hover:bg-black/50 hover:scale-105 px-4 py-2 rounded-full backdrop-blur-md transition-all border border-white/20 text-xs font-black tracking-widest uppercase">
+                <Home className="w-3.5 h-3.5 mr-2" /> Início
               </Link>
-              <Link to={`/grade/${parentGradeId}?subject=${foundLesson.subject}`} className="inline-flex items-center text-white/90 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full backdrop-blur-md transition-colors border border-white/10 text-sm font-bold">
-                <ArrowLeft className="w-4 h-4 mr-2" /> Grade
+              <Link to={`/grade/${parentGradeId}?subject=${foundLesson.subject}`} className="inline-flex items-center text-white/95 bg-white/15 hover:bg-white/25 hover:scale-105 px-4 py-2 rounded-full backdrop-blur-md transition-all border border-white/20 text-xs font-black tracking-widest uppercase">
+                <ArrowLeft className="w-3.5 h-3.5 mr-2" /> Voltar
               </Link>
            </div>
-          <div className="flex justify-between items-end">
-            <h1 className="text-3xl font-bold text-white">{displayTitle}</h1>
-            <button 
+          <div className="flex justify-between items-end gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/70 mb-2">
+                {subjectsInfo[foundLesson.subject]?.icon} {subjectsInfo[foundLesson.subject]?.name || foundLesson.subject}
+              </p>
+              <h1 className="text-3xl md:text-4xl font-black text-white tracking-tighter font-display drop-shadow-lg leading-tight">{displayTitle}</h1>
+            </div>
+            <button
               onClick={() => exportToPDF('lesson-printable-content', `Aula_${displayTitle}`)}
-              className="mb-1 p-3 bg-white/10 hover:bg-white/20 rounded-2xl text-white backdrop-blur-md transition-all border border-white/10"
+              className="shrink-0 mb-1 p-3 bg-white/15 hover:bg-white/30 hover:scale-110 rounded-2xl text-white backdrop-blur-md transition-all border border-white/20 shadow-lg"
               title="Baixar Aula em PDF"
             >
               <Download size={20}/>
             </button>
           </div>
           {student && (
-            <div className="flex items-center gap-2 mt-4 text-white/90 bg-white/10 w-fit px-4 py-2 rounded-full backdrop-blur-sm border border-white/20">
-               <img src={student.photo_url} className="w-6 h-6 rounded-full object-cover" alt="User" />
-               <span className="text-xs font-bold uppercase">{student.name} • {student.school_class}</span>
+            <div className="flex items-center gap-2 mt-4 text-white/95 bg-white/15 w-fit px-4 py-2 rounded-full backdrop-blur-md border border-white/20 shadow-md">
+               <img src={student.photo_url} className="w-6 h-6 rounded-full object-cover ring-2 ring-vibe-lime/60" alt="User" />
+               <span className="text-[10px] font-black uppercase tracking-widest">{student.name} · {student.school_class}</span>
             </div>
           )}
         </div>
@@ -377,19 +386,31 @@ export const LessonView: React.FC = () => {
                   </div>
                 )}
 
-                  <div className="bg-blue-50 dark:bg-blue-900/10 p-8 rounded-[32px] border border-blue-100 dark:border-blue-900/30 text-center animate-in fade-in zoom-in-95">
-                    <Sparkles className="mx-auto text-tocantins-blue dark:text-tocantins-yellow mb-4" size={32} />
-                    <h4 className="text-blue-900 dark:text-blue-100 font-black uppercase text-sm tracking-tighter">Atividade Concluída?</h4>
-                    <p className="text-blue-700 dark:text-blue-400 text-[10px] font-bold uppercase tracking-widest mt-2 px-8">
-                      Clique no botão azul abaixo para enviar suas respostas. Seu professor receberá sua atividade para correção.
-                    </p>
+                  <div className="relative overflow-hidden bg-gradient-vibe p-1 rounded-[32px] shadow-glow-purple animate-in fade-in zoom-in-95">
+                    <div className="bg-white dark:bg-slate-900 p-8 rounded-[28px] text-center">
+                      <Sparkles className="mx-auto text-vibe-pink mb-4 animate-pulse-glow" size={36} />
+                      <h4 className="text-2xl font-black tracking-tighter font-display mb-2">
+                        <span className="text-gradient-vibe">✨ Tudo certo?</span>
+                      </h4>
+                      <p className="text-slate-600 dark:text-slate-400 text-[11px] font-bold uppercase tracking-widest mt-2 px-4">
+                        Mande agora pro seu professor. A IA corrige e ele dá o feedback final 💜
+                      </p>
+                    </div>
                   </div>
                 </div>
               ) : (
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-12 rounded-[40px] border border-slate-100 dark:border-slate-800 text-center animate-in fade-in">
-                <ListChecks className="mx-auto text-slate-300 dark:text-slate-600 mb-4" size={48} />
-                <h4 className="text-slate-800 dark:text-slate-200 font-bold uppercase text-xs tracking-widest">Atividades em Preparação</h4>
-                <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-2">O professor ainda não publicou atividades para esta aula.</p>
+              <div className="relative overflow-hidden bg-gradient-aurora p-1 rounded-[40px] shadow-glow-cyan animate-in fade-in">
+                <div className="bg-white dark:bg-slate-900 p-12 rounded-[36px] text-center">
+                  <div className="w-20 h-20 bg-gradient-aurora rounded-full flex items-center justify-center mx-auto mb-5 shadow-glow-cyan animate-float">
+                    <ListChecks className="text-white" size={36} />
+                  </div>
+                  <h4 className="text-2xl font-black tracking-tighter font-display mb-2">
+                    <span className="text-gradient-aurora">🎯 Prepare-se…</span>
+                  </h4>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs font-bold tracking-wide">
+                    O professor ainda está montando as atividades. Volte logo!
+                  </p>
+                </div>
               </div>
             )}
           </div>

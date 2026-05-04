@@ -1255,77 +1255,89 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <>
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex transition-colors duration-300">
-      {/* Sidebar Otimizada */}
-      <aside className="w-72 bg-white dark:bg-slate-900 border-r dark:border-slate-800 flex flex-col transition-colors">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex transition-colors duration-300 relative">
+      <div className="absolute inset-0 bg-mesh-bg opacity-40 dark:opacity-15 pointer-events-none"></div>
+
+      {/* Sidebar — gradient brand */}
+      <aside className="w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r dark:border-slate-800 flex flex-col transition-colors relative z-10">
         <div className="p-8">
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 bg-tocantins-blue dark:bg-tocantins-yellow rounded-2xl flex items-center justify-center text-white dark:text-slate-950 shadow-lg shadow-blue-200 dark:shadow-none">
-              <GraduationCap size={24}/>
+            <div className="w-12 h-12 bg-gradient-vibe rounded-[18px] flex items-center justify-center text-white shadow-glow-purple animate-float">
+              <GraduationCap size={26} strokeWidth={2.5}/>
             </div>
-            <h1 className="font-black text-xl text-slate-800 dark:text-white uppercase tracking-tighter">Área Docente</h1>
+            <div>
+              <h1 className="font-black text-xl tracking-tighter font-display">
+                <span className="text-gradient-vibe">Área Docente</span>
+              </h1>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mt-0.5">CHSA · TO</p>
+            </div>
           </div>
 
           <nav className="space-y-1">
             {[
-              { id: 'lessons_list', icon: BookOpen, label: 'Plano de Aulas' },
-              { id: 'question_bank', icon: Database, label: 'Banco de Temas' },
-              { id: 'submissions', icon: FileText, label: 'Submissões' },
-              { id: 'evaluations', icon: Award, label: 'Notas' },
-              { id: 'students', icon: UserCircle, label: 'Estudantes' },
-              { id: 'messages', icon: MessageSquare, label: 'Mensagens' },
-              { id: 'exam_generator', icon: BrainCircuit, label: 'Simulados IA' },
-              { id: 'reports', icon: BarChart3, label: 'Relatórios IA' },
-            ].map(item => (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
-                className={`w-full flex items-center gap-3 px-4 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer ${
-                  activeTab === item.id 
-                    ? 'bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950 shadow-lg shadow-blue-100 dark:shadow-none translate-x-2' 
-                    : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                <item.icon size={18}/> {item.label}
-              </button>
-            ))}
+              { id: 'lessons_list',   icon: BookOpen,     label: 'Plano de Aulas',   grad: 'bg-gradient-aurora',  glow: 'shadow-glow-cyan' },
+              { id: 'question_bank',  icon: Database,     label: 'Banco de Temas',   grad: 'bg-gradient-cosmic',  glow: 'shadow-glow-purple' },
+              { id: 'submissions',    icon: FileText,     label: 'Submissões',       grad: 'bg-gradient-ocean',   glow: 'shadow-glow-cyan' },
+              { id: 'evaluations',    icon: Award,        label: 'Notas',            grad: 'bg-gradient-fire',    glow: 'shadow-glow-orange' },
+              { id: 'students',       icon: UserCircle,   label: 'Estudantes',       grad: 'bg-gradient-vibe',    glow: 'shadow-glow-pink' },
+              { id: 'messages',       icon: MessageSquare,label: 'Mensagens',        grad: 'bg-gradient-mint',    glow: 'shadow-glow-lime' },
+              { id: 'exam_generator', icon: BrainCircuit, label: 'Simulados',        grad: 'bg-gradient-sunset',  glow: 'shadow-glow-pink' },
+              { id: 'reports',        icon: BarChart3,    label: 'Relatórios IA',    grad: 'bg-gradient-cosmic',  glow: 'shadow-glow-purple' },
+            ].map(item => {
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as any)}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all cursor-pointer ${
+                    isActive
+                      ? `${item.grad} text-white ${item.glow} translate-x-2 scale-[1.02]`
+                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:translate-x-1'
+                  }`}
+                >
+                  <item.icon size={18} strokeWidth={isActive ? 2.5 : 2}/> {item.label}
+                </button>
+              );
+            })}
           </nav>
         </div>
 
         <div className="mt-auto p-8 border-t dark:border-slate-800">
-           <button 
+           <button
              onClick={logoutTeacher}
-             className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all cursor-pointer"
+             className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.25em] text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:scale-105 transition-all cursor-pointer"
            >
              <LogOut size={18}/> Sair do Painel
            </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto h-screen p-8">
+      <main className="flex-1 overflow-y-auto h-screen p-8 relative z-10">
         <div className="max-w-6xl mx-auto">
           {/* Header Superior */}
           <header className="flex flex-wrap justify-between items-center gap-6 mb-10">
             <div>
-              <h2 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter leading-none">
-                {activeTab === 'lessons_list' && 'Gestão de Conteúdo'}
-                {activeTab === 'question_bank' && 'Arquivo de Atividades'}
-                {activeTab === 'submissions' && 'Retorno dos Alunos'}
-                {activeTab === 'evaluations' && 'Diário de Classe'}
-                {activeTab === 'students' && 'Carômetro'}
-                {activeTab === 'messages' && 'Central de Dúvidas'}
-                {activeTab === 'exam_generator' && 'Gerador de Provas'}
-                {activeTab === 'reports' && 'Análise de Progresso'}
+              <h2 className="text-4xl font-black tracking-tighter leading-none font-display">
+                <span className="text-gradient-vibe">
+                  {activeTab === 'lessons_list' && '📚 Gestão de Conteúdo'}
+                  {activeTab === 'question_bank' && '🗂️ Banco de Temas'}
+                  {activeTab === 'submissions' && '📥 Retorno dos Alunos'}
+                  {activeTab === 'evaluations' && '🏆 Diário de Classe'}
+                  {activeTab === 'students' && '👥 Carômetro'}
+                  {activeTab === 'messages' && '💬 Central de Dúvidas'}
+                  {activeTab === 'exam_generator' && '🎯 Simulados'}
+                  {activeTab === 'reports' && '📊 Análise de Progresso'}
+                </span>
               </h2>
-              <div className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest mt-2 flex items-center gap-2">
-                 <ShieldCheck size={14}/> 
+              <div className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-[0.25em] mt-2 flex items-center gap-2">
+                 <ShieldCheck size={14} className="text-vibe-cyan"/>
                  {isSuper ? (
-                   <span className="text-slate-500">Ambiente Administrativo Geral</span>
+                   <span className="text-slate-500">Ambiente administrativo geral</span>
                  ) : (
                    <div className="flex items-center gap-2">
                      <span className="text-slate-500">Docente de</span>
-                     <span className={`px-2 py-0.5 rounded-md text-white ${subjectsInfo[teacherSubject as Subject]?.color || 'bg-slate-600'}`}>
-                       {subjectsInfo[teacherSubject as Subject]?.name || teacherSubject}
+                     <span className={`px-3 py-1 rounded-full text-white text-[10px] font-black tracking-widest shadow-md ${subjectsInfo[teacherSubject as Subject]?.gradient || subjectsInfo[teacherSubject as Subject]?.color || 'bg-slate-600'}`}>
+                       {subjectsInfo[teacherSubject as Subject]?.icon} {subjectsInfo[teacherSubject as Subject]?.name || teacherSubject}
                      </span>
                    </div>
                  )}
