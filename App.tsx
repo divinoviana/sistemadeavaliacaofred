@@ -1,5 +1,5 @@
 
-import React, { Suspense, lazy, Component, ReactNode } from 'react';
+import React, { Suspense, lazy, ReactNode } from 'react';
 import { HashRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -29,21 +29,25 @@ const RouteFallback = () => (
 // Error Boundary global — evita que um erro de render numa tela
 // deixe o app inteiro em branco. Mostra uma mensagem amigável e
 // um botão pra tentar de novo.
+// Error Boundary global. Implementado como class component.
+// (Cast para `any` devido a um bug de inferência de tipo na config TS atual,
+// que não reconhece state/props mesmo após estender React.Component.)
 interface ErrorBoundaryProps { children: ReactNode }
 interface ErrorBoundaryState { hasError: boolean; error?: Error }
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends (React.Component as any) {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false };
+    (this as any).state = { hasError: false } as ErrorBoundaryState;
   }
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  componentDidCatch(error: Error, info: any) {
     console.error('[ErrorBoundary]', error, info);
   }
   render() {
-    if (this.state.hasError) {
+    const self: any = this;
+    if (self.state?.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 text-white">
           <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center">
@@ -51,11 +55,11 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                  style={{ background: 'linear-gradient(135deg, #FF3D8A 0%, #8B5CF6 100%)' }}>⚠️</div>
             <h2 className="text-xl font-black mb-2">Algo deu errado</h2>
             <p className="text-slate-400 text-sm mb-6 break-words">
-              {this.state.error?.message || 'Erro desconhecido no aplicativo.'}
+              {self.state.error?.message || 'Erro desconhecido no aplicativo.'}
             </p>
             <div className="flex gap-3 justify-center">
               <button
-                onClick={() => this.setState({ hasError: false, error: undefined })}
+                onClick={() => self.setState({ hasError: false, error: undefined })}
                 className="px-5 py-3 rounded-xl text-white text-xs font-black uppercase tracking-widest"
                 style={{ background: 'linear-gradient(135deg, #FF3D8A 0%, #8B5CF6 100%)' }}
               >
@@ -72,7 +76,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         </div>
       );
     }
-    return this.props.children;
+    return self.props.children;
   }
 }
 
