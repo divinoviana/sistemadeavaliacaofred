@@ -9,11 +9,11 @@ import { useAuth } from '../context/AuthContext';
 import { exportToPDF } from '../lib/pdfUtils';
 import { 
   Users, BookOpen, MessageSquare, Loader2, X, Save, 
-  Home, ShieldCheck, Trash2, Settings, Search, Award, 
+  Home, ShieldCheck, Trash2, Search, Award,
   Clock, Send, BrainCircuit, Sparkles, FileText, CheckCircle2,
   Filter, Download, GraduationCap, ChevronRight, ClipboardEdit, 
   BarChart3, Printer, Wand2, Library, ListChecks, Database,
-  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, AlertTriangle, UserCircle, RotateCw
+  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw
 } from 'lucide-react';
 
 // =====================================================================
@@ -224,8 +224,6 @@ export const AdminDashboard: React.FC = () => {
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
-  const [settingsModalStudent, setSettingsModalStudent] = useState<any | null>(null);
-  const [isDeletingStudent, setIsDeletingStudent] = useState(false);
 
   useEffect(() => {
     if (!isAuthLoading && !teacherSubject && !isSuper) {
@@ -525,40 +523,10 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // ============================================================
-  // CONFIGURAÇÕES DO ESTUDANTE (excluir)
-  // ============================================================
-  // Reset de senha foi removido: o próprio aluno faz pelo botão
-  // "Esqueceu a senha?" na tela de login (Login.tsx).
-  const handleDeleteStudent = async () => {
-    if (!settingsModalStudent) return;
-    const studentName = settingsModalStudent.name;
-    const confirm1 = confirm(
-      `⚠️ EXCLUIR estudante "${studentName}"?\n\n` +
-      `As submissões já enviadas serão MANTIDAS (com referência só pelo nome).\n` +
-      `O aluno NÃO conseguirá mais fazer login.\n\n` +
-      `Esta ação não pode ser desfeita.`
-    );
-    if (!confirm1) return;
-    const typed = prompt(`Para confirmar, digite EXCLUIR (em maiúsculas):`);
-    if (typed !== 'EXCLUIR') {
-      alert('Cancelado.');
-      return;
-    }
-    setIsDeletingStudent(true);
-    try {
-      const { error } = await supabase.from('students').delete().eq('id', settingsModalStudent.id);
-      if (error) throw error;
-      alert(`Estudante ${studentName} removido do sistema.`);
-      setSettingsModalStudent(null);
-      fetchStudents();
-    } catch (e: any) {
-      console.error('Erro ao excluir aluno:', e);
-      alert('Falha ao excluir: ' + (e?.message || ''));
-    } finally {
-      setIsDeletingStudent(false);
-    }
-  };
+  // Configurações do estudante foram removidas a pedido do professor.
+  // - Reset de senha → aluno faz via "Esqueceu a senha?" no login
+  // - Exclusão de estudante → operação administrativa do banco/Supabase
+  // No carômetro o professor só anota e envia mensagens.
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1774,13 +1742,6 @@ export const AdminDashboard: React.FC = () => {
                             >
                                <MessageSquare size={18}/>
                             </button>
-                            <button
-                              onClick={() => setSettingsModalStudent(st)}
-                              title="Configurações: redefinir senha ou excluir"
-                              className="p-2 text-slate-400 hover:text-tocantins-blue dark:hover:text-tocantins-yellow transition-colors cursor-pointer"
-                            >
-                               <Settings size={18}/>
-                            </button>
                          </div>
                       </div>
                    </div>
@@ -2528,86 +2489,6 @@ export const AdminDashboard: React.FC = () => {
           </div>
         );
       })()}
-
-      {/* Modal: Configurações do Estudante — versão simples e robusta */}
-      {settingsModalStudent && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300"
-          style={{ background: 'rgba(2, 6, 23, 0.85)', backdropFilter: 'blur(16px)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setSettingsModalStudent(null); }}
-        >
-          <div
-            className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header com gradient inline */}
-            <div
-              className="relative p-5 text-white"
-              style={{ background: 'linear-gradient(135deg, #6366F1 0%, #D946EF 50%, #FF3D8A 100%)' }}
-            >
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-white/20 ring-4 ring-white/30 flex items-center justify-center text-2xl backdrop-blur-md shrink-0">
-                    {String(settingsModalStudent?.name || '?').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-black text-white text-base tracking-tight drop-shadow truncate">{settingsModalStudent?.name || 'Estudante'}</h3>
-                    <p className="text-[9px] font-black text-white/90 uppercase tracking-[0.25em] mt-0.5 truncate">⚙️ {settingsModalStudent?.email || 'sem e-mail'}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSettingsModalStudent(null)}
-                  className="p-2 bg-white/15 hover:bg-white/25 rounded-xl text-white transition-all cursor-pointer shrink-0"
-                  aria-label="Fechar"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-3">
-              <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-[10px] tracking-[0.25em] flex items-center gap-2 mb-3">
-                <Settings size={14} className="text-purple-500"/> Ações Administrativas
-              </h4>
-
-              {/* Aviso: senha é responsabilidade do aluno */}
-              <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/40 rounded-2xl p-4">
-                <p className="text-[11px] text-blue-700 dark:text-blue-300 font-bold leading-relaxed flex items-start gap-2">
-                  <Lock size={14} className="shrink-0 mt-0.5" />
-                  <span>🔑 <strong>Senha do aluno:</strong> caso ele tenha esquecido, oriente-o a clicar em <em>"Esqueceu a senha?"</em> na tela de login. O aluno receberá um link por e-mail para criar uma nova senha.</span>
-                </p>
-              </div>
-
-              {/* Excluir estudante */}
-              <button
-                onClick={handleDeleteStudent}
-                disabled={isDeletingStudent}
-                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-2 border-red-200 dark:border-red-800/40 text-left hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 cursor-pointer transition-all"
-              >
-                <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md"
-                  style={{ background: 'linear-gradient(135deg, #EF4444 0%, #FF3D8A 100%)' }}
-                >
-                  {isDeletingStudent ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-black text-slate-800 dark:text-slate-100 text-sm">🗑️ Excluir estudante</p>
-                  <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
-                    Remove o perfil · submissões preservadas
-                  </p>
-                </div>
-              </button>
-
-              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40 rounded-2xl p-4 mt-2">
-                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold leading-relaxed flex items-start gap-2">
-                  <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                  <span>⚠️ A exclusão é permanente. O aluno não conseguirá mais fazer login.</span>
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal: Detalhamento de Notas do Estudante */}
       {selectedStudentEval && (
