@@ -225,7 +225,6 @@ export const AdminDashboard: React.FC = () => {
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
   const [settingsModalStudent, setSettingsModalStudent] = useState<any | null>(null);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [isDeletingStudent, setIsDeletingStudent] = useState(false);
 
   useEffect(() => {
@@ -527,30 +526,10 @@ export const AdminDashboard: React.FC = () => {
   };
 
   // ============================================================
-  // CONFIGURAÇÕES DO ESTUDANTE (reset senha + excluir)
+  // CONFIGURAÇÕES DO ESTUDANTE (excluir)
   // ============================================================
-  const handleResetStudentPassword = async () => {
-    if (!settingsModalStudent || !settingsModalStudent.email) {
-      alert('Aluno sem e-mail cadastrado — não é possível enviar link de redefinição.');
-      return;
-    }
-    if (!confirm(`Enviar link de redefinição de senha para ${settingsModalStudent.email}?`)) return;
-    setIsResettingPassword(true);
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        String(settingsModalStudent.email).toLowerCase(),
-        { redirectTo: window.location.origin }
-      );
-      if (error) throw error;
-      alert(`Link de redefinição enviado para ${settingsModalStudent.email}. O aluno deverá verificar a caixa de entrada (e o spam).`);
-    } catch (e: any) {
-      console.error('Erro ao enviar reset:', e);
-      alert('Falha ao enviar: ' + (e?.message || ''));
-    } finally {
-      setIsResettingPassword(false);
-    }
-  };
-
+  // Reset de senha foi removido: o próprio aluno faz pelo botão
+  // "Esqueceu a senha?" na tela de login (Login.tsx).
   const handleDeleteStudent = async () => {
     if (!settingsModalStudent) return;
     const studentName = settingsModalStudent.name;
@@ -2591,25 +2570,13 @@ export const AdminDashboard: React.FC = () => {
                 <Settings size={14} className="text-purple-500"/> Ações Administrativas
               </h4>
 
-              {/* Resetar senha */}
-              <button
-                onClick={handleResetStudentPassword}
-                disabled={isResettingPassword || !settingsModalStudent?.email}
-                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 border-2 border-cyan-200 dark:border-cyan-800/40 text-left hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 cursor-pointer transition-all"
-              >
-                <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md"
-                  style={{ background: 'linear-gradient(135deg, #22D3EE 0%, #8B5CF6 100%)' }}
-                >
-                  {isResettingPassword ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-black text-slate-800 dark:text-slate-100 text-sm">🔑 Redefinir senha</p>
-                  <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
-                    Envia link de reset por e-mail
-                  </p>
-                </div>
-              </button>
+              {/* Aviso: senha é responsabilidade do aluno */}
+              <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/40 rounded-2xl p-4">
+                <p className="text-[11px] text-blue-700 dark:text-blue-300 font-bold leading-relaxed flex items-start gap-2">
+                  <Lock size={14} className="shrink-0 mt-0.5" />
+                  <span>🔑 <strong>Senha do aluno:</strong> caso ele tenha esquecido, oriente-o a clicar em <em>"Esqueceu a senha?"</em> na tela de login. O aluno receberá um link por e-mail para criar uma nova senha.</span>
+                </p>
+              </div>
 
               {/* Excluir estudante */}
               <button
@@ -2631,7 +2598,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </button>
 
-              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40 rounded-2xl p-4 mt-4">
+              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40 rounded-2xl p-4 mt-2">
                 <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold leading-relaxed flex items-start gap-2">
                   <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                   <span>⚠️ A exclusão é permanente. O aluno não conseguirá mais fazer login.</span>

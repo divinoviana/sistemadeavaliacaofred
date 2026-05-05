@@ -462,8 +462,12 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
                 </div>
                 {!isRegistering && (
                   <div className="flex justify-end px-1">
-                    <button type="button" onClick={handleResetPassword} className="text-[9px] font-black uppercase text-slate-400 hover:text-tocantins-blue dark:hover:text-tocantins-yellow transition-colors tracking-widest">
-                      Esqueceu a senha?
+                    <button
+                      type="button"
+                      onClick={handleResetPassword}
+                      className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full text-vibe-purple hover:text-white hover:bg-gradient-vibe transition-all hover:scale-105"
+                    >
+                      🔑 Esqueceu a senha?
                     </button>
                   </div>
                 )}
