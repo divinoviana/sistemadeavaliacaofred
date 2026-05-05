@@ -2550,25 +2550,37 @@ export const AdminDashboard: React.FC = () => {
         );
       })()}
 
-      {/* Modal: Configurações do Estudante */}
+      {/* Modal: Configurações do Estudante — versão simples e robusta */}
       {settingsModalStudent && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-2xl z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="absolute -top-32 -right-20 w-80 h-80 bg-vibe-pink/20 rounded-full blur-3xl animate-blob"></div>
-          <div className="absolute -bottom-32 -left-20 w-80 h-80 bg-vibe-cyan/20 rounded-full blur-3xl animate-blob" style={{ animationDelay: '3s' }}></div>
-          <div className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden border border-white/20 z-10">
-            <div className="relative p-5 bg-gradient-cosmic text-white overflow-hidden">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-white/15 rounded-full blur-3xl"></div>
-              <div className="relative z-10 flex justify-between items-center">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300"
+          style={{ background: 'rgba(2, 6, 23, 0.85)', backdropFilter: 'blur(16px)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSettingsModalStudent(null); }}
+        >
+          <div
+            className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header com gradient inline */}
+            <div
+              className="relative p-5 text-white"
+              style={{ background: 'linear-gradient(135deg, #6366F1 0%, #D946EF 50%, #FF3D8A 100%)' }}
+            >
+              <div className="flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-glow-purple ring-4 ring-white/30">
-                    <StudentAvatar studentId={settingsModalStudent.id} studentName={settingsModalStudent.name} />
+                  <div className="w-12 h-12 rounded-2xl bg-white/20 ring-4 ring-white/30 flex items-center justify-center text-2xl backdrop-blur-md shrink-0">
+                    {String(settingsModalStudent?.name || '?').charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <h3 className="font-black text-white text-base tracking-tight font-display drop-shadow">{settingsModalStudent.name}</h3>
-                    <p className="text-[9px] font-black text-white/85 uppercase tracking-[0.25em] mt-0.5">⚙️ {settingsModalStudent.email || 'sem e-mail'}</p>
+                  <div className="min-w-0">
+                    <h3 className="font-black text-white text-base tracking-tight drop-shadow truncate">{settingsModalStudent?.name || 'Estudante'}</h3>
+                    <p className="text-[9px] font-black text-white/90 uppercase tracking-[0.25em] mt-0.5 truncate">⚙️ {settingsModalStudent?.email || 'sem e-mail'}</p>
                   </div>
                 </div>
-                <button onClick={() => setSettingsModalStudent(null)} className="p-2.5 bg-white/15 hover:bg-white/25 hover:rotate-90 hover:scale-110 rounded-xl text-white transition-all duration-300 cursor-pointer backdrop-blur-md">
+                <button
+                  onClick={() => setSettingsModalStudent(null)}
+                  className="p-2 bg-white/15 hover:bg-white/25 rounded-xl text-white transition-all cursor-pointer shrink-0"
+                  aria-label="Fechar"
+                >
                   <X size={18} />
                 </button>
               </div>
@@ -2576,25 +2588,26 @@ export const AdminDashboard: React.FC = () => {
 
             <div className="p-6 space-y-3">
               <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-[10px] tracking-[0.25em] flex items-center gap-2 mb-3">
-                <Settings size={14} className="text-vibe-purple"/> Ações Administrativas
+                <Settings size={14} className="text-purple-500"/> Ações Administrativas
               </h4>
 
               {/* Resetar senha */}
               <button
                 onClick={handleResetStudentPassword}
-                disabled={isResettingPassword || !settingsModalStudent.email}
-                className="w-full flex items-center gap-3 p-1 rounded-2xl bg-gradient-aurora hover:scale-[1.02] disabled:opacity-50 cursor-pointer shadow-md hover:shadow-glow-cyan transition-all"
+                disabled={isResettingPassword || !settingsModalStudent?.email}
+                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 border-2 border-cyan-200 dark:border-cyan-800/40 text-left hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 cursor-pointer transition-all"
               >
-                <div className="bg-white dark:bg-slate-900 rounded-[14px] p-3 flex items-center gap-3 w-full">
-                  <div className="w-11 h-11 bg-gradient-aurora rounded-xl flex items-center justify-center text-white shadow-glow-cyan shrink-0">
-                    {isResettingPassword ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="font-black text-slate-800 dark:text-slate-100 text-sm">🔑 Redefinir senha</p>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                      Envia link de reset por e-mail
-                    </p>
-                  </div>
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md"
+                  style={{ background: 'linear-gradient(135deg, #22D3EE 0%, #8B5CF6 100%)' }}
+                >
+                  {isResettingPassword ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-800 dark:text-slate-100 text-sm">🔑 Redefinir senha</p>
+                  <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
+                    Envia link de reset por e-mail
+                  </p>
                 </div>
               </button>
 
@@ -2602,23 +2615,24 @@ export const AdminDashboard: React.FC = () => {
               <button
                 onClick={handleDeleteStudent}
                 disabled={isDeletingStudent}
-                className="w-full flex items-center gap-3 p-1 rounded-2xl bg-gradient-to-r from-red-500 via-pink-500 to-orange-500 hover:scale-[1.02] disabled:opacity-50 cursor-pointer shadow-md hover:shadow-glow-pink transition-all"
+                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-2 border-red-200 dark:border-red-800/40 text-left hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 cursor-pointer transition-all"
               >
-                <div className="bg-white dark:bg-slate-900 rounded-[14px] p-3 flex items-center gap-3 w-full">
-                  <div className="w-11 h-11 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center text-white shadow-glow-pink shrink-0">
-                    {isDeletingStudent ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="font-black text-slate-800 dark:text-slate-100 text-sm">🗑️ Excluir estudante</p>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                      Remove o perfil · submissões preservadas
-                    </p>
-                  </div>
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md"
+                  style={{ background: 'linear-gradient(135deg, #EF4444 0%, #FF3D8A 100%)' }}
+                >
+                  {isDeletingStudent ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-800 dark:text-slate-100 text-sm">🗑️ Excluir estudante</p>
+                  <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
+                    Remove o perfil · submissões preservadas
+                  </p>
                 </div>
               </button>
 
-              <div className="bg-vibe-orange/10 border border-vibe-orange/30 rounded-2xl p-4 mt-4">
-                <p className="text-[11px] text-vibe-orange dark:text-amber-300 font-bold leading-relaxed flex items-start gap-2">
+              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40 rounded-2xl p-4 mt-4">
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold leading-relaxed flex items-start gap-2">
                   <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                   <span>⚠️ A exclusão é permanente. O aluno não conseguirá mais fazer login.</span>
                 </p>

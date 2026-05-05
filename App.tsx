@@ -1,5 +1,5 @@
 
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, Component, ReactNode } from 'react';
 import { HashRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -25,6 +25,52 @@ const RouteFallback = () => (
     <div className="w-8 h-8 border-4 border-slate-200 border-t-tocantins-blue rounded-full animate-spin"></div>
   </div>
 );
+
+// Error Boundary global — evita que um erro de render numa tela
+// deixe o app inteiro em branco. Mostra uma mensagem amigável e
+// um botão pra tentar de novo.
+interface ErrorBoundaryState { hasError: boolean; error?: Error }
+class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: any) {
+    console.error('[ErrorBoundary]', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 text-white">
+          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center">
+            <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center text-3xl"
+                 style={{ background: 'linear-gradient(135deg, #FF3D8A 0%, #8B5CF6 100%)' }}>⚠️</div>
+            <h2 className="text-xl font-black mb-2">Algo deu errado</h2>
+            <p className="text-slate-400 text-sm mb-6 break-words">
+              {this.state.error?.message || 'Erro desconhecido no aplicativo.'}
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => this.setState({ hasError: false, error: undefined })}
+                className="px-5 py-3 rounded-xl text-white text-xs font-black uppercase tracking-widest"
+                style={{ background: 'linear-gradient(135deg, #FF3D8A 0%, #8B5CF6 100%)' }}
+              >
+                Tentar Novamente
+              </button>
+              <button
+                onClick={() => { window.location.hash = '#/'; window.location.reload(); }}
+                className="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-black uppercase tracking-widest"
+              >
+                Recarregar App
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const StudentRoute = ({ children }: { children?: React.ReactNode }) => {
   const { student, isLoading } = useAuth();
@@ -98,13 +144,15 @@ function AppContent() {
 
 function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
