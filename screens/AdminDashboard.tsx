@@ -2422,24 +2422,29 @@ export const AdminDashboard: React.FC = () => {
         const activeNotes = grouped[activeCat.v] || [];
 
         return (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
-            <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-              {/* Header */}
-              <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-md ring-4 ring-white dark:ring-slate-900">
-                    <StudentAvatar studentId={notesModalStudent.id} studentName={notesModalStudent.name} />
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-2xl z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
+            <div className="absolute -top-32 -left-20 w-96 h-96 bg-vibe-pink/20 rounded-full blur-3xl animate-blob"></div>
+            <div className="absolute -bottom-32 -right-20 w-96 h-96 bg-vibe-cyan/20 rounded-full blur-3xl animate-blob" style={{ animationDelay: '3s' }}></div>
+            <div className="relative bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-white/20 z-10">
+              {/* Header com gradient */}
+              <div className="relative p-6 bg-gradient-vibe text-white overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-white/20 rounded-full blur-3xl"></div>
+                <div className="relative z-10 flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-glow-pink ring-4 ring-white/30">
+                      <StudentAvatar studentId={notesModalStudent.id} studentName={notesModalStudent.name} />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-white tracking-tight text-xl leading-tight font-display drop-shadow">{notesModalStudent.name}</h3>
+                      <p className="text-[10px] font-black text-white/85 uppercase tracking-[0.25em] mt-1">
+                        {notesModalStudent.grade}ª Série · Turma {notesModalStudent.school_class} · ✏️ {studentNotes.length} {studentNotes.length === 1 ? 'anotação' : 'anotações'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg leading-tight">{notesModalStudent.name}</h3>
-                    <p className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest mt-1">
-                      {notesModalStudent.grade}ª Série • Turma {notesModalStudent.school_class} • {studentNotes.length} {studentNotes.length === 1 ? 'anotação' : 'anotações'}
-                    </p>
-                  </div>
+                  <button onClick={() => setNotesModalStudent(null)} className="p-3 bg-white/15 hover:bg-white/25 hover:rotate-90 hover:scale-110 rounded-2xl text-white transition-all duration-300 cursor-pointer backdrop-blur-md">
+                    <X size={20} />
+                  </button>
                 </div>
-                <button onClick={() => setNotesModalStudent(null)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-500 hover:text-red-500 transition-all cursor-pointer hover:rotate-90 duration-300">
-                  <X size={20} />
-                </button>
               </div>
 
               {/* Abas das categorias */}
@@ -2547,42 +2552,49 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Modal: Configurações do Estudante */}
       {settingsModalStudent && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden">
-            <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-md ring-4 ring-white dark:ring-slate-900">
-                  <StudentAvatar studentId={settingsModalStudent.id} studentName={settingsModalStudent.name} />
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-2xl z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="absolute -top-32 -right-20 w-80 h-80 bg-vibe-pink/20 rounded-full blur-3xl animate-blob"></div>
+          <div className="absolute -bottom-32 -left-20 w-80 h-80 bg-vibe-cyan/20 rounded-full blur-3xl animate-blob" style={{ animationDelay: '3s' }}></div>
+          <div className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden border border-white/20 z-10">
+            <div className="relative p-5 bg-gradient-cosmic text-white overflow-hidden">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-white/15 rounded-full blur-3xl"></div>
+              <div className="relative z-10 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-glow-purple ring-4 ring-white/30">
+                    <StudentAvatar studentId={settingsModalStudent.id} studentName={settingsModalStudent.name} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-white text-base tracking-tight font-display drop-shadow">{settingsModalStudent.name}</h3>
+                    <p className="text-[9px] font-black text-white/85 uppercase tracking-[0.25em] mt-0.5">⚙️ {settingsModalStudent.email || 'sem e-mail'}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-tight">{settingsModalStudent.name}</h3>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{settingsModalStudent.email || 'sem e-mail'}</p>
-                </div>
+                <button onClick={() => setSettingsModalStudent(null)} className="p-2.5 bg-white/15 hover:bg-white/25 hover:rotate-90 hover:scale-110 rounded-xl text-white transition-all duration-300 cursor-pointer backdrop-blur-md">
+                  <X size={18} />
+                </button>
               </div>
-              <button onClick={() => setSettingsModalStudent(null)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 hover:text-red-500 transition-all cursor-pointer">
-                <X size={18} />
-              </button>
             </div>
 
             <div className="p-6 space-y-3">
-              <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-xs tracking-tight flex items-center gap-2 mb-2">
-                <Settings size={14} /> Ações Administrativas
+              <h4 className="font-black text-slate-700 dark:text-slate-200 uppercase text-[10px] tracking-[0.25em] flex items-center gap-2 mb-3">
+                <Settings size={14} className="text-vibe-purple"/> Ações Administrativas
               </h4>
 
               {/* Resetar senha */}
               <button
                 onClick={handleResetStudentPassword}
                 disabled={isResettingPassword || !settingsModalStudent.email}
-                className="w-full flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl text-left hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-all disabled:opacity-50 cursor-pointer"
+                className="w-full flex items-center gap-3 p-1 rounded-2xl bg-gradient-aurora hover:scale-[1.02] disabled:opacity-50 cursor-pointer shadow-md hover:shadow-glow-cyan transition-all"
               >
-                <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center text-white shadow-md shrink-0">
-                  {isResettingPassword ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Redefinir senha</p>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                    Envia link por e-mail para o aluno criar uma nova senha
-                  </p>
+                <div className="bg-white dark:bg-slate-900 rounded-[14px] p-3 flex items-center gap-3 w-full">
+                  <div className="w-11 h-11 bg-gradient-aurora rounded-xl flex items-center justify-center text-white shadow-glow-cyan shrink-0">
+                    {isResettingPassword ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
+                  </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="font-black text-slate-800 dark:text-slate-100 text-sm">🔑 Redefinir senha</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                      Envia link de reset por e-mail
+                    </p>
+                  </div>
                 </div>
               </button>
 
@@ -2590,23 +2602,25 @@ export const AdminDashboard: React.FC = () => {
               <button
                 onClick={handleDeleteStudent}
                 disabled={isDeletingStudent}
-                className="w-full flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-2xl text-left hover:bg-red-100 dark:hover:bg-red-900/20 transition-all disabled:opacity-50 cursor-pointer"
+                className="w-full flex items-center gap-3 p-1 rounded-2xl bg-gradient-to-r from-red-500 via-pink-500 to-orange-500 hover:scale-[1.02] disabled:opacity-50 cursor-pointer shadow-md hover:shadow-glow-pink transition-all"
               >
-                <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center text-white shadow-md shrink-0">
-                  {isDeletingStudent ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Excluir estudante</p>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
-                    Remove o perfil. Submissões antigas são preservadas.
-                  </p>
+                <div className="bg-white dark:bg-slate-900 rounded-[14px] p-3 flex items-center gap-3 w-full">
+                  <div className="w-11 h-11 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center text-white shadow-glow-pink shrink-0">
+                    {isDeletingStudent ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                  </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="font-black text-slate-800 dark:text-slate-100 text-sm">🗑️ Excluir estudante</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                      Remove o perfil · submissões preservadas
+                    </p>
+                  </div>
                 </div>
               </button>
 
-              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-2xl p-4 mt-4">
-                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold leading-relaxed flex items-start gap-2">
+              <div className="bg-vibe-orange/10 border border-vibe-orange/30 rounded-2xl p-4 mt-4">
+                <p className="text-[11px] text-vibe-orange dark:text-amber-300 font-bold leading-relaxed flex items-start gap-2">
                   <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                  <span>A exclusão é permanente. O aluno não conseguirá mais fazer login no portal.</span>
+                  <span>⚠️ A exclusão é permanente. O aluno não conseguirá mais fazer login.</span>
                 </p>
               </div>
             </div>

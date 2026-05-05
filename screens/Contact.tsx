@@ -107,70 +107,89 @@ export const Contact: React.FC = () => {
   if (!student) return null;
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl min-h-[85vh] font-sans transition-colors duration-300">
-      <div className="flex items-center justify-between mb-8">
-        <Link to="/" className="inline-flex items-center text-slate-500 dark:text-slate-400 hover:text-tocantins-blue dark:hover:text-tocantins-yellow font-black text-xs uppercase tracking-widest transition-colors">
-          <ArrowLeft className="w-4 h-4 mr-1" /> Voltar ao Início
+    <div className="container mx-auto px-4 py-8 max-w-4xl min-h-[85vh] font-sans transition-colors duration-300 relative">
+      <div className="absolute inset-0 bg-mesh-bg opacity-50 dark:opacity-15 pointer-events-none"></div>
+      <div className="flex items-center justify-between mb-8 relative z-10">
+        <Link to="/" className="inline-flex items-center bg-white dark:bg-slate-900 px-4 py-2 rounded-full shadow-md text-slate-500 dark:text-slate-400 hover:text-vibe-pink hover:scale-105 font-black text-[10px] uppercase tracking-[0.3em] transition-all">
+          <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
         </Link>
-        <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Central de Alertas</h2>
+        <h2 className="text-3xl font-black tracking-tighter font-display">
+          <span className="text-gradient-vibe">💬 Central de Dúvidas</span>
+        </h2>
       </div>
 
       {!selectedSubject ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
               <div className="md:col-span-2 mb-2">
-                  <p className="text-sm text-slate-500 dark:text-slate-400 font-bold">Escolha um professor para conversar ou ver seus alertas:</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 font-bold">Escolha o professor pra começar:</p>
               </div>
               {(Object.entries(subjectsInfo) as [Subject, any][]).map(([key, info]) => (
-                  <button key={key} onClick={() => setSelectedSubject(key)} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border-2 border-transparent hover:border-tocantins-blue dark:hover:border-tocantins-yellow hover:shadow-xl transition-all text-left flex items-center justify-between group shadow-sm">
+                  <button key={key} onClick={() => setSelectedSubject(key)} className={`relative overflow-hidden rounded-3xl p-1 ${info.gradient || info.color} ${info.glow || 'shadow-xl'} hover:-translate-y-1 hover:scale-[1.02] transition-all text-left group`}>
+                    <div className="bg-white dark:bg-slate-900 rounded-[20px] p-6 flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 ${info.color} rounded-2xl flex items-center justify-center text-2xl shadow-lg`}>{info.icon}</div>
+                        <div className={`w-14 h-14 ${info.gradient || info.color} rounded-2xl flex items-center justify-center text-2xl shadow-md group-hover:rotate-6 group-hover:scale-110 transition-transform`}>{info.icon}</div>
                         <div>
-                            <h3 className="font-bold text-slate-800 dark:text-slate-100">Prof. de {info.name}</h3>
-                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-widest">Clique para abrir o chat</p>
+                            <h3 className="font-black text-slate-800 dark:text-slate-100 text-base">Prof. de {info.name}</h3>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-widest mt-0.5">Toque pra abrir o chat 💬</p>
                         </div>
                       </div>
-                      <ChevronRight className="text-slate-200 dark:text-slate-700 group-hover:text-tocantins-blue dark:group-hover:text-tocantins-yellow transition-colors" />
+                      <ChevronRight className="text-slate-300 dark:text-slate-700 group-hover:text-vibe-pink group-hover:translate-x-1 transition-all" />
+                    </div>
                   </button>
               ))}
           </div>
       ) : (
-          <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col h-[70vh] animate-in zoom-in-95 duration-300 transition-colors duration-300">
-            <div className={`${subjectsInfo[selectedSubject].color} p-5 text-white flex items-center justify-between shadow-lg border-b border-white/5`}>
-              <div className="flex items-center gap-3">
-                <button onClick={() => setSelectedSubject(null)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><ArrowLeft size={18}/></button>
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center border border-white/20 shadow-inner"><UserCircle size={24} /></div>
+          <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col h-[70vh] animate-in zoom-in-95 duration-300 relative z-10">
+            <div className={`${subjectsInfo[selectedSubject].gradient || subjectsInfo[selectedSubject].color} p-5 text-white flex items-center justify-between shadow-lg relative overflow-hidden`}>
+              <div className="absolute top-0 right-0 w-40 h-40 bg-white/20 rounded-full blur-3xl animate-blob"></div>
+              <div className="flex items-center gap-3 relative z-10">
+                <button onClick={() => setSelectedSubject(null)} className="p-2.5 bg-white/15 hover:bg-white/25 hover:scale-110 rounded-full backdrop-blur-md transition-all"><ArrowLeft size={18}/></button>
+                <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center border border-white/30 shadow-inner backdrop-blur-md text-2xl">{subjectsInfo[selectedSubject].icon}</div>
                 <div>
-                  <h3 className="font-bold text-sm leading-tight">Prof. de {subjectsInfo[selectedSubject].name}</h3>
-                  <p className="text-[10px] text-white/80 font-bold uppercase tracking-widest">Canal de Dúvidas e Alertas</p>
+                  <h3 className="font-black text-sm leading-tight">Prof. de {subjectsInfo[selectedSubject].name}</h3>
+                  <p className="text-[10px] text-white/80 font-black uppercase tracking-widest">Canal de Dúvidas</p>
                 </div>
               </div>
-              <div className="bg-white/10 px-3 py-1 rounded-full text-[9px] font-black uppercase hidden sm:block border border-white/10">Seguro</div>
+              <span className="bg-vibe-lime/90 text-slate-950 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest hidden sm:flex items-center gap-1.5 shadow-md relative z-10">
+                <span className="w-1.5 h-1.5 bg-emerald-700 rounded-full animate-pulse"></span> Online
+              </span>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/50 dark:bg-slate-950/20">
               {loadingMessages && messages.length === 0 ? (
-                <div className="flex flex-col justify-center items-center h-full gap-2"><Loader2 className="animate-spin text-tocantins-blue dark:text-tocantins-yellow" /><p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Conectando...</p></div>
+                <div className="flex flex-col justify-center items-center h-full gap-2"><Loader2 className="animate-spin text-vibe-purple" /><p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Conectando…</p></div>
               ) : messages.length === 0 ? (
-                <div className="text-center py-10 opacity-30"><MessageCircle className="mx-auto text-slate-300 dark:text-slate-600 mb-4" size={64} /><p className="text-slate-500 dark:text-slate-400 text-sm font-bold">Mande um "Oi" para seu professor!</p></div>
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-gradient-vibe rounded-full flex items-center justify-center mx-auto mb-4 shadow-glow-purple animate-float">
+                    <MessageCircle className="text-white" size={40} />
+                  </div>
+                  <p className="font-black text-slate-700 dark:text-slate-200 text-sm tracking-tight">Comece a conversa! 👋</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mt-1">Mande um "Oi" pro seu professor</p>
+                </div>
               ) : (
                 messages.map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.is_from_teacher ? 'justify-start' : 'justify-end'}`}>
-                    <div className={`max-w-[85%] p-4 rounded-[26px] shadow-md text-sm leading-relaxed ${
-                      msg.is_from_teacher ? 'bg-white dark:bg-slate-800 border-l-4 border-l-tocantins-blue dark:border-l-tocantins-yellow text-slate-700 dark:text-slate-200 rounded-tl-none ring-1 ring-slate-200 dark:ring-slate-700' : 'bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950 rounded-tr-none'
-                    }`}>
-                      {msg.is_from_teacher && <p className="text-[8px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase mb-1 tracking-widest">Aviso do Professor</p>}
-                      <p className="break-words font-medium">{msg.content}</p>
-                      <p className={`text-[9px] mt-2 font-bold flex justify-end ${msg.is_from_teacher ? 'text-slate-400 dark:text-slate-500' : 'text-blue-200 dark:text-slate-800/60'}`}>{msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
-                    </div>
+                  <div key={msg.id} className={`flex ${msg.is_from_teacher ? 'justify-start' : 'justify-end'} animate-in slide-in-from-bottom-2 duration-300`}>
+                    {msg.is_from_teacher ? (
+                      <div className="max-w-[85%] bg-white dark:bg-slate-800 px-5 py-4 rounded-[24px] rounded-tl-md shadow-md text-sm leading-relaxed text-slate-700 dark:text-slate-200 border-l-4 border-vibe-purple">
+                        <p className="text-[8px] font-black text-vibe-purple uppercase mb-1 tracking-[0.25em]">📢 Professor</p>
+                        <p className="break-words font-medium">{msg.content}</p>
+                        <p className="text-[9px] mt-2 font-bold flex justify-end text-slate-400 dark:text-slate-500">{msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                      </div>
+                    ) : (
+                      <div className="max-w-[85%] bg-gradient-vibe text-white px-5 py-4 rounded-[24px] rounded-tr-md shadow-glow-purple text-sm leading-relaxed">
+                        <p className="break-words font-medium drop-shadow">{msg.content}</p>
+                        <p className="text-[9px] mt-2 font-bold flex justify-end text-white/80">{msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
               <div ref={chatEndRef} />
             </div>
 
-            <form onSubmit={handleSendMessage} className="p-5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-2">
-              <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Tire sua dúvida aqui..." className="flex-1 p-4 bg-slate-100 dark:bg-slate-800 border-none rounded-2xl text-sm focus:ring-2 focus:ring-tocantins-blue dark:focus:ring-tocantins-yellow outline-none transition dark:text-white" disabled={sending} />
-              <button type="submit" disabled={sending || !newMessage.trim()} className="bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950 w-14 h-14 rounded-2xl hover:bg-blue-800 dark:hover:bg-amber-500 transition shadow-lg flex items-center justify-center disabled:opacity-50 active:scale-90 cursor-pointer">{sending ? <Loader2 size={24} className="animate-spin" /> : <Send size={24} />}</button>
+            <form onSubmit={handleSendMessage} className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-2">
+              <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Manda sua dúvida aqui… ✏️" className="flex-1 px-5 py-4 bg-slate-100 dark:bg-slate-800 border-none rounded-2xl text-sm focus:ring-4 focus:ring-vibe-purple/20 outline-none transition dark:text-white placeholder:text-slate-400" disabled={sending} />
+              <button type="submit" disabled={sending || !newMessage.trim()} className="bg-gradient-vibe text-white w-14 h-14 rounded-2xl hover:scale-110 hover:shadow-glow-pink transition-all shadow-glow-purple flex items-center justify-center disabled:opacity-50 active:scale-95 cursor-pointer">{sending ? <Loader2 size={22} className="animate-spin" /> : <Send size={22} />}</button>
             </form>
           </div>
       )}

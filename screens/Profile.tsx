@@ -102,36 +102,45 @@ export const Profile: React.FC = () => {
   if (!student) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans p-4 transition-colors duration-300">
-      <div className="container mx-auto max-w-md bg-white dark:bg-slate-900 rounded-[40px] shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden mt-8 transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans p-4 transition-colors duration-300 relative overflow-hidden flex items-center justify-center">
+      <div className="absolute inset-0 bg-mesh-bg opacity-60 dark:opacity-15 pointer-events-none"></div>
+      <div className="absolute -top-32 -left-20 w-96 h-96 bg-vibe-pink/30 rounded-full blur-3xl animate-blob"></div>
+      <div className="absolute -bottom-32 -right-20 w-96 h-96 bg-vibe-cyan/30 rounded-full blur-3xl animate-blob" style={{ animationDelay: '3s' }}></div>
+
+      <div className="relative container mx-auto max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-[40px] shadow-2xl border border-white/50 dark:border-slate-800/50 overflow-hidden z-10">
         <div className="p-6 border-b dark:border-slate-800 flex items-center justify-between">
-          <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full dark:text-slate-400">
-            <ArrowLeft size={20} />
+          <button onClick={() => navigate(-1)} className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl dark:text-slate-400 hover:scale-110 transition-all">
+            <ArrowLeft size={18} />
           </button>
-          <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-100">Meu Perfil</h2>
+          <h2 className="text-sm font-black uppercase tracking-[0.3em] font-display">
+            <span className="text-gradient-vibe">✨ Meu Perfil</span>
+          </h2>
           <div className="w-8" />
         </div>
 
         <div className="p-8 space-y-8 text-center">
           <div className="relative inline-block group">
-            <div className="w-32 h-32 rounded-[32px] overflow-hidden border-4 border-tocantins-blue dark:border-tocantins-yellow shadow-lg">
+            <div className="absolute -inset-2 bg-gradient-vibe rounded-[36px] blur-md opacity-70 animate-pulse-glow"></div>
+            <div className="relative w-32 h-32 rounded-[32px] overflow-hidden ring-4 ring-white dark:ring-slate-900 shadow-glow-purple">
               <img src={newPhoto || student.photo_url} className="w-full h-full object-cover" />
             </div>
             {loading && (
               <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 flex items-center justify-center rounded-[32px]">
-                <Loader2 className="animate-spin text-tocantins-blue dark:text-tocantins-yellow" />
+                <Loader2 className="animate-spin text-vibe-purple" />
               </div>
             )}
           </div>
 
           <div className="space-y-1">
-            <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase">{student.name}</h3>
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{student.grade}ª Série • {student.school_class}</p>
+            <h3 className="text-2xl font-black tracking-tighter font-display">
+              <span className="text-gradient-vibe">{student.name}</span>
+            </h3>
+            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">{student.grade}ª Série · Turma {student.school_class}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="flex items-center justify-center gap-2 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-tocantins-blue dark:hover:border-tocantins-yellow transition-all cursor-pointer text-[10px] font-black uppercase dark:text-slate-300">
-              <Upload size={16} /> Arquivo
+            <label className="flex items-center justify-center gap-2 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-vibe-pink dark:hover:border-vibe-cyan hover:scale-105 transition-all cursor-pointer text-[10px] font-black uppercase tracking-widest dark:text-slate-300">
+              <Upload size={16} className="text-vibe-cyan" /> Arquivo
               <input type="file" accept="image/*" className="hidden" onChange={e => {
                 const file = e.target.files?.[0];
                 if (file) {
@@ -166,29 +175,31 @@ export const Profile: React.FC = () => {
                 }
               }} />
             </label>
-            <button onClick={startCamera} className="flex items-center justify-center gap-2 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-tocantins-blue dark:hover:border-tocantins-yellow transition-all text-[10px] font-black uppercase dark:text-slate-300">
-              <Camera size={16} /> Câmera
+            <button onClick={startCamera} className="flex items-center justify-center gap-2 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-vibe-pink dark:hover:border-vibe-cyan hover:scale-105 transition-all text-[10px] font-black uppercase tracking-widest dark:text-slate-300">
+              <Camera size={16} className="text-vibe-pink" /> Câmera
             </button>
           </div>
 
           {newPhoto && (
-            <button onClick={handleSave} disabled={loading} className="w-full bg-green-600 dark:bg-green-700 text-white p-5 rounded-2xl font-black uppercase text-xs shadow-lg shadow-green-100 dark:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer">
+            <button onClick={handleSave} disabled={loading} className="w-full bg-gradient-vibe text-white p-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-glow-purple hover:scale-[1.02] hover:shadow-glow-pink flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50">
               {loading ? <Loader2 className="animate-spin" /> : <Save size={18} />}
-              Salvar Nova Foto
+              ✨ Salvar Nova Foto
             </button>
           )}
         </div>
 
         {showCamera && (
-          <div className="fixed inset-0 z-[200] bg-slate-900 flex flex-col items-center justify-center p-4">
-            <div className="relative w-full max-w-sm aspect-square rounded-3xl overflow-hidden shadow-2xl">
+          <div className="fixed inset-0 z-[200] bg-slate-950/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4">
+            <div className="absolute -top-32 -left-20 w-96 h-96 bg-vibe-pink/40 rounded-full blur-3xl animate-blob"></div>
+            <div className="absolute -bottom-32 -right-20 w-96 h-96 bg-vibe-cyan/40 rounded-full blur-3xl animate-blob" style={{ animationDelay: '2s' }}></div>
+            <div className="relative w-full max-w-sm aspect-square rounded-[36px] overflow-hidden shadow-2xl ring-4 ring-vibe-purple/40">
               <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
             </div>
-            <div className="mt-8 flex gap-4">
-              <button onClick={() => setShowCamera(false)} className="bg-white/10 text-white p-4 rounded-full">
+            <div className="mt-8 flex gap-4 relative z-10">
+              <button onClick={() => setShowCamera(false)} className="bg-white/10 hover:bg-white/20 text-white p-4 rounded-full backdrop-blur-md hover:scale-110 transition-all">
                 <X size={24} />
               </button>
-              <button onClick={takePhoto} className="bg-tocantins-blue text-white p-6 rounded-full shadow-2xl scale-110">
+              <button onClick={takePhoto} className="bg-gradient-vibe text-white p-6 rounded-full shadow-glow-purple scale-110 hover:scale-125 active:scale-100 transition-all">
                 <Camera size={32} />
               </button>
             </div>

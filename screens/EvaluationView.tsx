@@ -324,31 +324,53 @@ export const EvaluationView: React.FC = () => {
                );
               })}
 
-              <button 
-                onClick={handleSubmit} 
+              <button
+                onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="w-full bg-slate-900 dark:bg-slate-800 text-white py-6 rounded-[32px] font-black uppercase tracking-widest text-sm shadow-2xl hover:bg-slate-800 dark:hover:bg-slate-700 transition active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
+                className="w-full bg-gradient-cosmic text-white py-6 rounded-[32px] font-black uppercase tracking-[0.25em] text-sm shadow-glow-purple hover:shadow-glow-pink hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
               >
                  {isSubmitting ? <Loader2 className="animate-spin"/> : <Send size={20}/>}
-                 Finalizar e Bloquear Tentativa
+                 🚀 Finalizar e Bloquear Tentativa
               </button>
            </div>
         ) : (
-           <div className="bg-white dark:bg-slate-900 rounded-[50px] shadow-2xl p-12 text-center border-4 border-indigo-100 dark:border-indigo-900 animate-in zoom-in duration-500 transition-colors duration-300">
-              <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg ${alreadyDone ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shadow-amber-50 dark:shadow-none' : 'bg-green-100 dark:bg-green-950/40 text-green-600 dark:text-green-400 shadow-green-50 dark:shadow-none'}`}>
-                 {alreadyDone ? <Lock size={48}/> : <CheckCircle2 size={48}/>}
+           <div className={`relative overflow-hidden ${alreadyDone ? 'bg-gradient-aurora' : 'bg-gradient-fire'} p-1 rounded-[44px] ${alreadyDone ? 'shadow-glow-cyan' : 'shadow-glow-orange'} animate-in zoom-in duration-500`}>
+            {/* confete-style blobs decorativos */}
+            {!alreadyDone && (
+              <>
+                <div className="absolute top-10 left-10 w-32 h-32 bg-vibe-lime/40 rounded-full blur-2xl animate-blob"></div>
+                <div className="absolute top-1/3 right-10 w-32 h-32 bg-vibe-pink/40 rounded-full blur-2xl animate-blob" style={{ animationDelay: '2s' }}></div>
+                <div className="absolute bottom-10 left-1/3 w-32 h-32 bg-vibe-cyan/40 rounded-full blur-2xl animate-blob" style={{ animationDelay: '4s' }}></div>
+              </>
+            )}
+            <div className="relative bg-white dark:bg-slate-900 rounded-[40px] p-12 text-center">
+              <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl animate-float ${alreadyDone ? 'bg-gradient-aurora text-white shadow-glow-cyan' : 'bg-gradient-fire text-white shadow-glow-orange'}`}>
+                 {alreadyDone ? <Lock size={48}/> : <CheckCircle2 size={56} strokeWidth={2.5}/>}
               </div>
-              <h2 className="text-3xl font-black text-slate-800 dark:text-slate-100 uppercase tracking-tighter mb-2">
-                {alreadyDone ? 'Prova já Realizada' : 'Simulado Concluído!'}
+              <h2 className="text-4xl md:text-5xl font-black tracking-tighter mb-3 font-display">
+                <span className={alreadyDone ? 'text-gradient-aurora' : 'text-gradient-sunset'}>
+                  {alreadyDone ? '🔒 Prova já Realizada' : '🎉 Mandou bem!'}
+                </span>
               </h2>
-              <p className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest mb-10">
-                {alreadyDone ? 'Você já utilizou sua única chance nesta disciplina.' : 'Sua resposta foi enviada e o professor irá validar sua atividade.'}
+              <p className="text-slate-500 dark:text-slate-400 font-bold text-sm tracking-wide mb-2 max-w-md mx-auto">
+                {alreadyDone ? 'Você já usou sua única chance nesta disciplina.' : 'Sua resposta foi enviada e a IA já corrigiu!'}
               </p>
+              {!alreadyDone && score > 0 && (
+                <div className="inline-flex items-center gap-3 bg-gradient-fire text-white px-8 py-4 rounded-full shadow-glow-orange mt-4 mb-8 animate-pulse-glow">
+                  <Award size={24}/>
+                  <span className="text-3xl font-black tracking-tighter">{score.toFixed(1)}</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest opacity-90">/ 10</span>
+                </div>
+              )}
+              {alreadyDone && (
+                <p className="text-slate-400 dark:text-slate-500 font-black uppercase text-[10px] tracking-[0.3em] mb-8">Sua nota já está no histórico</p>
+              )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md mx-auto">
-                 <button onClick={() => navigate('/')} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition">Voltar ao Portal</button>
-                 <Link to="/my-activities" className="bg-tocantins-blue dark:bg-tocantins-yellow text-white dark:text-slate-950 py-4 rounded-2xl font-bold shadow-lg hover:bg-blue-800 dark:hover:bg-amber-500 transition">Ver Histórico</Link>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-md mx-auto">
+                 <button onClick={() => navigate('/')} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] hover:scale-105 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">🏠 Início</button>
+                 <Link to="/my-activities" className="bg-gradient-vibe text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-glow-purple hover:scale-105 hover:shadow-glow-pink transition-all">📚 Ver Histórico</Link>
               </div>
+            </div>
            </div>
         )}
       </div>
