@@ -161,25 +161,25 @@ const Gallery: React.FC<{ onPick: (s: NeuroStudent) => void }> = ({ onPick }) =>
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar por nome…"
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-medium focus:outline-none focus:border-vibe-purple"
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-vibe-purple"
             />
           </div>
           <div className="flex flex-wrap gap-2">
             <select value={turno} onChange={e => setTurno(e.target.value as any)}
-              className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold focus:outline-none focus:border-vibe-purple">
+              className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-vibe-purple">
               <option value="all">Todos os turnos</option>
               <option value="matutino">☀️ Matutino</option>
               <option value="vespertino">🌙 Vespertino</option>
             </select>
             <select value={serie} onChange={e => setSerie(e.target.value)}
-              className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold focus:outline-none focus:border-vibe-purple">
+              className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-vibe-purple">
               <option value="all">Todas as séries</option>
               <option value="1º ano">1º ano</option>
               <option value="2º ano">2º ano</option>
               <option value="3º ano">3º ano</option>
             </select>
             <select value={diag} onChange={e => setDiag(e.target.value)}
-              className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold focus:outline-none focus:border-vibe-purple">
+              className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-vibe-purple">
               <option value="all">Todos os diagnósticos</option>
               {allDiagnoses().map(d => <option key={d} value={d}>{d}</option>)}
             </select>
@@ -439,13 +439,13 @@ const Builder: React.FC<{
                 value={theme}
                 onChange={e => setTheme(e.target.value)}
                 placeholder="ex.: Iluminismo · Cultura indígena · Geografia do Tocantins"
-                className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base font-medium focus:outline-none focus:border-vibe-purple"
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-vibe-purple"
               />
             </Field>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Componente curricular">
-                <select value={subject} onChange={e => setSubject(e.target.value as any)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base font-medium focus:outline-none focus:border-vibe-purple">
+                <select value={subject} onChange={e => setSubject(e.target.value as any)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base font-medium text-slate-900 dark:text-white focus:outline-none focus:border-vibe-purple">
                   <option>História</option>
                   <option>Geografia</option>
                   <option>Filosofia</option>
@@ -455,7 +455,7 @@ const Builder: React.FC<{
               </Field>
 
               <Field label="Duração">
-                <select value={duration} onChange={e => setDuration(e.target.value as any)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base font-medium focus:outline-none focus:border-vibe-purple">
+                <select value={duration} onChange={e => setDuration(e.target.value as any)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base font-medium text-slate-900 dark:text-white focus:outline-none focus:border-vibe-purple">
                   <option>15 minutos</option>
                   <option>30 minutos</option>
                   <option>45 minutos</option>
@@ -484,7 +484,7 @@ const Builder: React.FC<{
                 onChange={e => setNotes(e.target.value)}
                 rows={3}
                 placeholder="ex.: Quero focar em vocabulário visual; o aluno hoje está mais agitado; usar tema Tocantins."
-                className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base focus:outline-none focus:border-vibe-purple"
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-vibe-purple"
               />
             </Field>
 

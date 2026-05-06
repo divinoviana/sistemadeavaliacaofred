@@ -131,7 +131,7 @@ export const PasscodeGate: React.FC<Props> = ({ children }) => {
               value={input}
               onChange={e => setInput(e.target.value)}
               placeholder="Digite o código informado pela coordenação"
-              className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base font-medium focus:outline-none focus:border-vibe-purple"
+              className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-base font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-vibe-purple"
             />
           </div>
 
