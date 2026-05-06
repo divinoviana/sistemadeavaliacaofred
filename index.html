@@ -96,6 +96,22 @@
       .text-gradient-vibe { background: linear-gradient(135deg, #FF3D8A 0%, #8B5CF6 50%, #22D3EE 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
       .text-gradient-sunset { background: linear-gradient(135deg, #FF6B35 0%, #FF3D8A 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
       .text-gradient-aurora { background: linear-gradient(135deg, #22D3EE 0%, #8B5CF6 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+
+      /* Modo de impressão e export PDF (atividades adaptadas) */
+      @media print {
+        body { background: white !important; }
+        header, footer { display: none !important; }
+        .print\:hidden { display: none !important; }
+        #activity-print-area { box-shadow: none !important; border: 0 !important; padding: 0 !important; }
+      }
+      /* export-mode: aplicado pelo PDF exporter para neutralizar cores escuras */
+      .export-mode, .export-mode * {
+        background-color: transparent !important;
+        color: #0f172a !important;
+        text-shadow: none !important;
+        box-shadow: none !important;
+      }
+      .export-mode .bg-white, .export-mode .bg-slate-50 { background-color: #ffffff !important; }
     </style>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased">

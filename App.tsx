@@ -18,6 +18,7 @@ const AdminDashboard = lazy(() => import('./screens/AdminDashboard').then(m => (
 const MyActivities   = lazy(() => import('./screens/MyActivities').then(m => ({ default: m.MyActivities })));
 const EvaluationView = lazy(() => import('./screens/EvaluationView').then(m => ({ default: m.EvaluationView })));
 const Profile        = lazy(() => import('./screens/Profile').then(m => ({ default: m.Profile })));
+const AdaptedActivities = lazy(() => import('./screens/AdaptedActivities').then(m => ({ default: m.AdaptedActivities })));
 
 // Spinner padrão enquanto a tela carrega
 const RouteFallback = () => (
@@ -126,6 +127,9 @@ function AppContent() {
             <Route path="/my-activities" element={<StudentRoute><MyActivities /></StudentRoute>} />
             <Route path="/profile" element={<StudentRoute><Profile /></StudentRoute>} />
             <Route path="/admin" element={<AdminDashboard />} />
+            {/* Rota PÚBLICA — atividades adaptadas para neurodivergentes.
+                Sem login: o professor acessa direto pelo link e gera atividade. */}
+            <Route path="/atividades-adaptadas" element={<AdaptedActivities />} />
           </Routes>
         </Suspense>
       </main>
@@ -145,9 +149,14 @@ function AppContent() {
                 <span className="text-white text-sm font-mono tracking-wide">+55 (63) 99919-1919</span>
                 <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Prof. Divino Viana</span>
               </div>
-              <Link to="/admin" className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-xl text-white/60 hover:text-white transition-colors text-xs">
-                <Lock className="w-3 h-3" /> Painel Admin
-              </Link>
+              <div className="flex flex-col md:items-end gap-2">
+                <Link to="/atividades-adaptadas" className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-vibe rounded-xl text-white text-xs font-bold shadow-glow-purple hover:scale-105 transition">
+                  ✨ Atividades Adaptadas (PEIs)
+                </Link>
+                <Link to="/admin" className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-xl text-white/60 hover:text-white transition-colors text-xs">
+                  <Lock className="w-3 h-3" /> Painel Admin
+                </Link>
+              </div>
             </div>
           </div>
           <div className="text-center text-xs space-y-2 opacity-80">
