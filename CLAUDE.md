@@ -20,6 +20,7 @@ Supabase, com IA DeepSeek para correção automática.
 | IA | DeepSeek (`api.deepseek.com/v1`, formato OpenAI). Modelo `deepseek-chat`. |
 | Hospedagem | Vercel (auto-deploy a partir do `main`) |
 | PDF | `jspdf` + `html2canvas` (lazy-loaded) |
+| DOCX | `docx` (export de atividades adaptadas) |
 
 ---
 
@@ -99,6 +100,7 @@ o app funcionar mesmo se o SQL de fix não tiver sido rodado ainda.
 | `/contact` | `Contact.tsx` | Chat aluno↔professor por matéria. Realtime via channel `supabase`. |
 | `/my-activities` | `MyActivities.tsx` | Histórico de submissões com feedback da IA + nota. |
 | `/profile` | `Profile.tsx` | Trocar foto (câmera ou upload, redimensiona pra 512px @ 60% qualidade). |
+| `/atividades-adaptadas` | `AdaptedActivities.tsx` | **Rota pública** (sem login) — professor gera atividades adaptadas para alunos neurodivergentes. Exporta PDF/DOCX. CSS de impressão tem `@media print` em `index.html` + classe `.export-mode` que neutraliza cores escuras. |
 
 ### Admin (`/admin`)
 
