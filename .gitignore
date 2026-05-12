@@ -26,3 +26,6 @@ dist-ssr
 *.sln
 *.sw?
 bundle.js
+
+# Scripts de diagnóstico temporários
+_*.cjs
