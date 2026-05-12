@@ -1882,72 +1882,134 @@ export const AdminDashboard: React.FC = () => {
             );
           })()}
 
-          {activeTab === 'submissions' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 overflow-hidden shadow-sm">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-800/50">
-                        <th className="p-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Estudante</th>
-                        <th className="p-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Tópico / Disciplina</th>
-                        <th className="p-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Data</th>
-                        <th className="p-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Nota</th>
-                        <th className="p-6 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y dark:divide-slate-800">
-                      {filteredSubmissions.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="p-20 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest">
-                            Nenhuma submissão encontrada.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredSubmissions.map((sub: any) => (
-                          <tr key={sub.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                            <td className="p-6">
-                               <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm ring-2 ring-slate-100 dark:ring-slate-800">
-                                     <StudentAvatar studentName={sub.student_name} />
+          {activeTab === 'submissions' && (() => {
+            // Agrupa submissões por estudante (id → nome+turma fallback)
+            const grouped: Record<string, { key: string; name: string; school_class: string; subs: any[] }> = {};
+            filteredSubmissions.forEach((sub: any) => {
+              const key = sub.student_id || `name:${(sub.student_name || 'sem-nome').toLowerCase().trim()}`;
+              if (!grouped[key]) {
+                grouped[key] = {
+                  key,
+                  name: sub.student_name || '—',
+                  school_class: sub.school_class || '—',
+                  subs: [],
+                };
+              }
+              grouped[key].subs.push(sub);
+            });
+            const groups = Object.values(grouped).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+            return (
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center justify-between px-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {groups.length} {groups.length === 1 ? 'estudante' : 'estudantes'} · {filteredSubmissions.length} entregas
+                  </p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:block">
+                    Clique no estudante para expandir
+                  </p>
+                </div>
+
+                {groups.length === 0 ? (
+                  <div className="bg-white dark:bg-slate-900 rounded-[40px] border-2 border-dashed dark:border-slate-800 p-12 text-center">
+                    <FileText className="mx-auto text-slate-300 dark:text-slate-700 mb-3" size={40}/>
+                    <p className="font-black text-slate-700 dark:text-slate-200 tracking-tight">Nenhuma submissão</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Os envios aparecerão aqui quando os alunos terminarem suas atividades.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {groups.map((g, gIdx) => {
+                      const sortedSubs = [...g.subs].sort((a, b) => {
+                        const ta = new Date(a.submitted_at || a.submission_date || 0).getTime();
+                        const tb = new Date(b.submitted_at || b.submission_date || 0).getTime();
+                        return tb - ta;
+                      });
+                      const totalScore = sortedSubs.reduce((acc, s) => acc + (Number(s.score) || 0), 0);
+                      const avgScore = sortedSubs.length > 0 ? totalScore / sortedSubs.length : 0;
+                      const avgClass = avgScore >= 7 ? 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : avgScore >= 5 ? 'bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400';
+                      const studentId = g.key.startsWith('name:') ? undefined : g.key;
+                      // Última entrega + quantas ainda sem feedback do prof
+                      const lastDate = sortedSubs[0]?.submitted_at || sortedSubs[0]?.submission_date;
+                      const pendingFeedback = sortedSubs.filter(s => !s.teacher_feedback).length;
+
+                      return (
+                        <details key={g.key} className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 shadow-sm group overflow-hidden" open={gIdx === 0 && groups.length === 1}>
+                          <summary className="cursor-pointer p-4 sm:p-5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors list-none flex items-center gap-3 sm:gap-4">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest w-6 text-center shrink-0">{gIdx + 1}</span>
+                            <div className="w-11 h-11 rounded-xl overflow-hidden shadow-sm ring-2 ring-slate-100 dark:ring-slate-800 shrink-0">
+                              <StudentAvatar studentId={studentId} studentName={g.name} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-black text-slate-800 dark:text-slate-100 text-sm truncate">{g.name}</p>
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                                Turma {g.school_class} · {sortedSubs.length} {sortedSubs.length === 1 ? 'entrega' : 'entregas'}
+                                {pendingFeedback > 0 && <span className="text-amber-600 dark:text-amber-400"> · {pendingFeedback} sem feedback</span>}
+                                {lastDate && ` · última em ${new Date(lastDate).toLocaleDateString('pt-BR')}`}
+                              </p>
+                            </div>
+                            <div className="hidden sm:flex flex-col items-end gap-0.5 shrink-0">
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Média</p>
+                              <span className={`px-3 py-1 rounded-full text-xs font-black ${avgClass}`}>
+                                {avgScore.toFixed(1)} / 10
+                              </span>
+                            </div>
+                            <ChevronRight size={18} className="text-slate-300 dark:text-slate-700 group-open:rotate-90 transition-transform shrink-0"/>
+                          </summary>
+
+                          {/* Conteúdo expandido — lista de entregas */}
+                          <div className="border-t dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
+                            <div className="divide-y dark:divide-slate-800">
+                              {sortedSubs.map((sub: any) => {
+                                const isEssay = sub.ai_feedback?.type === 'essay_enem' || String(sub.lesson_title || '').startsWith('Redação:');
+                                const isExam = !isEssay && (String(sub.lesson_title || '').toLowerCase().includes('avaliação bimestral') || String(sub.lesson_title || '').toLowerCase().includes('simulado'));
+                                const score = Number(sub.score) || 0;
+                                const scoreClass = score >= 7 ? 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : score >= 5 ? 'bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400';
+                                const subjInfo = subjectsInfo[sub.subject as Subject];
+                                return (
+                                  <div key={sub.id} className="p-4 sm:p-5 flex items-center gap-3 sm:gap-4 hover:bg-white dark:hover:bg-slate-900 transition-colors">
+                                    {/* Tipo (badge) */}
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm ${isEssay ? 'bg-gradient-fire' : isExam ? 'bg-gradient-cosmic' : (subjInfo?.gradient || subjInfo?.color || 'bg-slate-400')}`}>
+                                      <span className="text-base">{isEssay ? '✍️' : isExam ? '🎯' : subjInfo?.icon || '📚'}</span>
+                                    </div>
+                                    {/* Título + matéria + data */}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-0.5">
+                                        {isEssay && <span className="px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded text-[8px] font-black uppercase tracking-widest shrink-0">Redação</span>}
+                                        {isExam && <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded text-[8px] font-black uppercase tracking-widest shrink-0">Simulado</span>}
+                                        {!sub.teacher_feedback && !isEssay && <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded text-[8px] font-black uppercase tracking-widest shrink-0">Pendente</span>}
+                                      </div>
+                                      <p className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 leading-tight truncate">{sub.lesson_title}</p>
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                                        {subjInfo?.name || sub.subject} · {sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString('pt-BR') : (sub.submission_date ? new Date(sub.submission_date).toLocaleDateString('pt-BR') : '—')}
+                                      </p>
+                                    </div>
+                                    {/* Nota */}
+                                    <div className={`hidden sm:inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest shrink-0 ${scoreClass}`}>
+                                      {score.toFixed(1)} / 10
+                                    </div>
+                                    {/* Botão Avaliar */}
+                                    <button
+                                      onClick={() => {
+                                        setViewingSubmission(sub);
+                                        setManualFeedback(sub.teacher_feedback || '');
+                                      }}
+                                      className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl text-vibe-purple hover:bg-gradient-vibe hover:text-white hover:border-transparent transition-all cursor-pointer font-black text-[10px] uppercase tracking-widest shrink-0"
+                                    >
+                                      <Eye size={14}/> <span className="hidden sm:inline">Avaliar</span>
+                                    </button>
                                   </div>
-                                  <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">{sub.student_name}</span>
-                               </div>
-                            </td>
-                            <td className="p-6">
-                               <p className="text-sm font-bold text-slate-700 dark:text-slate-200 leading-tight">{sub.lesson_title}</p>
-                               <span className="text-[10px] uppercase font-black text-slate-400">{sub.subject}</span>
-                            </td>
-                            <td className="p-6 text-xs text-slate-500 font-bold">
-                               {(sub.created_at?.toDate ? sub.created_at.toDate() : (sub.submitted_at?.toDate ? sub.submitted_at.toDate() : null))?.toLocaleString() || 'Recente'}
-                            </td>
-                            <td className="p-6">
-                               <div className={`inline-flex items-center px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest ${
-                                 Number(sub.score || 0) >= 7 
-                                   ? 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' 
-                                   : 'bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400'
-                               }`}>
-                                 {typeof sub.score === 'number' ? sub.score.toFixed(1) : (sub.score || sub.grade_auto || 0)} / 10
-                               </div>
-                            </td>
-                            <td className="p-6">
-                               <button 
-                                 onClick={() => {
-                                   setViewingSubmission(sub);
-                                   setManualFeedback(sub.teacher_feedback || '');
-                                 }}
-                                 className="flex items-center gap-2 p-3 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl text-tocantins-blue dark:text-tocantins-yellow hover:shadow-lg transition-all cursor-pointer font-black text-[10px] uppercase tracking-widest"
-                               >
-                                 <Eye size={16}/> Avaliar
-                               </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-               </div>
-            </div>
-          )}
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {activeTab === 'evaluations' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
