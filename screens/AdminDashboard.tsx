@@ -202,6 +202,13 @@ export const AdminDashboard: React.FC = () => {
   const [isPublishingExam, setIsPublishingExam] = useState(false);
   const [publishedExams, setPublishedExams] = useState<any[]>([]);
 
+  // ── Banco de Temas ─────────────────────────────
+  const [bankSelectedSubject, setBankSelectedSubject] = useState<string | null>(null);
+  const [bankSelectedTopic, setBankSelectedTopic] = useState<string | null>(null);
+  const [reuseModalQuestion, setReuseModalQuestion] = useState<any | null>(null);
+  const [reuseTargetLessonId, setReuseTargetLessonId] = useState<string>('');
+  const [isReusing, setIsReusing] = useState(false);
+
   // ── Redação ────────────────────────────────────
   const [essayTitle, setEssayTitle] = useState('');
   const [essayGrade, setEssayGrade] = useState('1');
@@ -791,6 +798,64 @@ export const AdminDashboard: React.FC = () => {
       setPublishedEssays(all.filter((e: any) => e.type === 'essay'));
     } catch (e) {
       console.error('Erro ao buscar simulados/redações:', e);
+    }
+  };
+
+  // ============================================================
+  // BANCO DE TEMAS — Reutilizar questão em outra aula
+  // ============================================================
+  // Duplica a questão pra uma aula alvo, criando nova row em `questions`
+  // (a original permanece intacta).
+  const handleReuseQuestion = async () => {
+    if (!reuseModalQuestion || !reuseTargetLessonId || isReusing) return;
+
+    // Resolve nome da aula alvo (do curriculumData) para gravar como `topic`
+    let targetLesson: any = null;
+    for (const g of curriculumData) {
+      for (const b of g.bimesters) {
+        const l = b.lessons.find(x => x.id === reuseTargetLessonId);
+        if (l) { targetLesson = l; break; }
+      }
+      if (targetLesson) break;
+    }
+    if (!targetLesson) { alert('Aula alvo não encontrada.'); return; }
+
+    setIsReusing(true);
+    try {
+      // 1) Cria a nova questão vinculada à aula alvo
+      const newQ: any = {
+        subject: targetLesson.subject,
+        topic: lessonOverrides[targetLesson.id]?.title || targetLesson.title,
+        lesson_id: targetLesson.id,
+        type: reuseModalQuestion.type,
+        difficulty: reuseModalQuestion.difficulty || 'Médio',
+        question_text: reuseModalQuestion.question_text,
+        options: reuseModalQuestion.options || null,
+        correct_option: reuseModalQuestion.correct_option || null,
+        explanation: reuseModalQuestion.explanation || null,
+      };
+      const { error: insertErr } = await supabase.from('questions').insert(newQ);
+      if (insertErr) throw insertErr;
+
+      // 2) Garante que a activity da aula alvo exista (pra aluno enxergar)
+      if (!savedActivities.includes(targetLesson.id)) {
+        const { error: actErr } = await supabase.from('activities').insert({
+          lesson_id: targetLesson.id,
+          title: `Atividade: ${targetLesson.title}`,
+        });
+        if (actErr) console.warn('Falha ao criar activity:', actErr);
+      }
+
+      alert(`Questão reutilizada na aula "${targetLesson.title}".`);
+      setReuseModalQuestion(null);
+      setReuseTargetLessonId('');
+      fetchQuestionBank();
+      fetchSavedActivities();
+    } catch (e: any) {
+      alert('Erro ao reutilizar: ' + (e?.message || ''));
+      console.error(e);
+    } finally {
+      setIsReusing(false);
     }
   };
 
@@ -1560,105 +1625,262 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'question_bank' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <div className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border dark:border-slate-800 shadow-sm mb-6 transition-colors">
-                  <div className="flex items-center gap-3 mb-4">
-                     <Database className="text-tocantins-blue dark:text-tocantins-yellow" size={24}/>
-                     <div>
-                        <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg">Acervo de Humanas</h3>
-                        <p className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest leading-none mt-1">Repositório de questões e atividades curadas</p>
-                     </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                        <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs mb-2 uppercase">Gestão Editorial</h4>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4 leading-relaxed tracking-wider">As atividades e questões são coordenadas manualmente pelos professores através do Plano de Aulas.</p>
-                     </div>
-                     <div className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                        <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs mb-2 uppercase">Segurança de Dados</h4>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4 leading-relaxed tracking-wider">O banco é protegido com backup automático via Firebase Firestore. Alterações são permanentes.</p>
-                     </div>
-                  </div>
-               </div>
+          {activeTab === 'question_bank' && (() => {
+            // === BANCO DE TEMAS — navegação em 3 níveis ===
+            //   1) Disciplinas (cards das 4 matérias)
+            //   2) Tópicos (cards com contagem de questões por tópico)
+            //   3) Questões do tópico (lista expansível com ações)
 
-               <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 overflow-hidden shadow-sm">
-                  <div className="p-8 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
-                     <div>
-                        <h2 className="font-black text-slate-800 dark:text-white uppercase tracking-tighter text-xl">Questões Individuais</h2>
-                        <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Banco de questões avulsas ou vinculadas</p>
-                     </div>
-                     <div className="text-[10px] font-black bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-6 py-2 rounded-xl uppercase tracking-widest">
-                       {questionBank.length} Questões
-                     </div>
-                  </div>
+            // Filtra questões pelo prof logado (se não-super)
+            const visibleQs = questionBank.filter((q: any) => isSuper || !teacherSubject || q.subject === teacherSubject);
 
-                  <div className="p-8">
-                     {questionBank.length === 0 ? (
-                       <div className="text-center py-20 bg-slate-50 dark:bg-slate-800/30 rounded-3xl border border-dashed dark:border-slate-800">
-                          <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhuma questão encontrada no acervo.</p>
-                       </div>
-                     ) : (
-                       <div className="grid grid-cols-1 gap-4">
-                         {questionBank
-                           .filter(q => searchTerm === '' || q.question_text.toLowerCase().includes(searchTerm.toLowerCase()) || q.topic?.toLowerCase().includes(searchTerm.toLowerCase()))
-                           .map((q: any) => (
-                             <div key={q.id} className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800 group hover:border-tocantins-blue/30 transition-all">
-                               <div className="flex justify-between items-start mb-4">
-                                 <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                       <span className={`w-2 h-2 rounded-full ${subjectsInfo[q.subject as Subject]?.color || 'bg-slate-400'}`}></span>
-                                       <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                                         {subjectsInfo[q.subject as Subject]?.name || q.subject} • {q.topic}
-                                       </span>
+            // Agrupa por subject → topic
+            const bySubject: Record<string, any[]> = {};
+            visibleQs.forEach((q: any) => {
+              const subj = q.subject || 'outros';
+              if (!bySubject[subj]) bySubject[subj] = [];
+              bySubject[subj].push(q);
+            });
+
+            const subjectsToShow = (Object.keys(subjectsInfo) as Subject[])
+              .filter(s => isSuper || !teacherSubject || s === teacherSubject);
+
+            // Tópicos da disciplina selecionada
+            const topicsForSelected: Record<string, any[]> = {};
+            if (bankSelectedSubject) {
+              (bySubject[bankSelectedSubject] || []).forEach((q: any) => {
+                const t = q.topic || 'Sem tópico';
+                if (!topicsForSelected[t]) topicsForSelected[t] = [];
+                topicsForSelected[t].push(q);
+              });
+            }
+
+            const selectedSubjectInfo = bankSelectedSubject ? subjectsInfo[bankSelectedSubject as Subject] : null;
+
+            return (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Breadcrumb */}
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.25em]">
+                  <button
+                    onClick={() => { setBankSelectedSubject(null); setBankSelectedTopic(null); }}
+                    className={`px-3 py-1.5 rounded-full transition-all ${!bankSelectedSubject ? 'bg-gradient-cosmic text-white shadow-glow-purple' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:scale-105'}`}
+                  >
+                    📚 Disciplinas
+                  </button>
+                  {bankSelectedSubject && (
+                    <>
+                      <span className="text-slate-400">›</span>
+                      <button
+                        onClick={() => setBankSelectedTopic(null)}
+                        className={`px-3 py-1.5 rounded-full text-white shadow-md ${selectedSubjectInfo?.gradient || selectedSubjectInfo?.color}`}
+                      >
+                        {selectedSubjectInfo?.icon} {selectedSubjectInfo?.name}
+                      </button>
+                    </>
+                  )}
+                  {bankSelectedTopic && (
+                    <>
+                      <span className="text-slate-400">›</span>
+                      <span className="px-3 py-1.5 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 truncate max-w-md">
+                        {bankSelectedTopic}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {/* NÍVEL 1: Disciplinas */}
+                {!bankSelectedSubject && (
+                  <>
+                    <div className="text-center py-6">
+                      <h2 className="text-3xl font-black tracking-tighter font-display mb-2">
+                        <span className="text-gradient-cosmic">🗂️ Banco de Temas</span>
+                      </h2>
+                      <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">{visibleQs.length} questões salvas · escolha uma disciplina pra explorar</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {subjectsToShow.map((s) => {
+                        const info = subjectsInfo[s];
+                        const qs = bySubject[s] || [];
+                        const topicCount = new Set(qs.map((q: any) => q.topic)).size;
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => setBankSelectedSubject(s)}
+                            disabled={qs.length === 0}
+                            className={`relative overflow-hidden rounded-[32px] p-1 transition-all group ${
+                              qs.length > 0
+                                ? `${info.gradient || info.color} ${info.glow || 'shadow-xl'} hover:-translate-y-2 hover:scale-[1.02]`
+                                : 'bg-slate-200/60 dark:bg-slate-800/60 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            <div className="bg-white dark:bg-slate-900 rounded-[28px] p-6 text-left h-full">
+                              <div className={`w-14 h-14 ${info.gradient || info.color} rounded-2xl flex items-center justify-center text-2xl mb-4 shadow-md ${qs.length === 0 && 'grayscale'} group-hover:rotate-6 group-hover:scale-110 transition-transform`}>
+                                {info.icon}
+                              </div>
+                              <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 font-display tracking-tight mb-1">{info.name}</h3>
+                              {qs.length > 0 ? (
+                                <p className="text-[10px] font-black uppercase tracking-widest text-vibe-purple">
+                                  {qs.length} questões · {topicCount} tópicos
+                                </p>
+                              ) : (
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Banco vazio</p>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* NÍVEL 2: Tópicos da disciplina selecionada */}
+                {bankSelectedSubject && !bankSelectedTopic && (
+                  <div className={`relative overflow-hidden ${selectedSubjectInfo?.gradient || selectedSubjectInfo?.color} p-1 rounded-[36px] ${selectedSubjectInfo?.glow || 'shadow-xl'}`}>
+                    <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6">
+                      <div className="flex items-center justify-between mb-5">
+                        <div>
+                          <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg flex items-center gap-2">
+                            <span className="text-2xl">{selectedSubjectInfo?.icon}</span> {selectedSubjectInfo?.name} · Tópicos
+                          </h3>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                            {Object.keys(topicsForSelected).length} tópicos · {(bySubject[bankSelectedSubject] || []).length} questões
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setBankSelectedSubject(null)}
+                          className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-vibe-pink transition-all px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800"
+                        >
+                          ← Voltar
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {Object.entries(topicsForSelected)
+                          .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
+                          .map(([topic, qs]) => (
+                          <button
+                            key={topic}
+                            onClick={() => setBankSelectedTopic(topic)}
+                            className="text-left p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-vibe-purple/40 transition-all group flex items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="font-black text-slate-800 dark:text-slate-100 text-sm leading-tight truncate group-hover:text-vibe-purple">{topic}</p>
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                                {qs.length} questões · {qs.filter(q => q.type === 'objective').length} obj · {qs.filter(q => q.type === 'discursive').length} disc
+                              </p>
+                            </div>
+                            <ChevronRight className="text-slate-300 dark:text-slate-700 group-hover:text-vibe-pink group-hover:translate-x-1 transition-all shrink-0" size={18}/>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* NÍVEL 3: Questões do tópico */}
+                {bankSelectedSubject && bankSelectedTopic && (
+                  <div className="bg-white dark:bg-slate-900 rounded-[36px] border dark:border-slate-800 shadow-sm">
+                    <div className="p-6 border-b dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/20">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-black text-vibe-purple uppercase tracking-widest mb-1">{selectedSubjectInfo?.icon} {selectedSubjectInfo?.name}</p>
+                        <h3 className="font-black text-slate-800 dark:text-white text-lg leading-tight tracking-tight truncate">{bankSelectedTopic}</h3>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                          {(topicsForSelected[bankSelectedTopic] || []).length} questões neste tópico
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setBankSelectedTopic(null)}
+                        className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-vibe-pink transition-all px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0"
+                      >
+                        ← Tópicos
+                      </button>
+                    </div>
+
+                    <div className="divide-y dark:divide-slate-800">
+                      {(topicsForSelected[bankSelectedTopic] || [])
+                        .filter(q => searchTerm === '' || q.question_text.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .map((q: any, idx: number) => (
+                        <details key={q.id} className="group">
+                          <summary className="cursor-pointer p-5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors list-none flex items-start gap-3">
+                            <span className="bg-gradient-cosmic text-white w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs shrink-0">{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${q.type === 'objective' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
+                                  {q.type === 'objective' ? 'OBJETIVA' : 'DISCURSIVA'}
+                                </span>
+                                {q.difficulty && <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{q.difficulty}</span>}
+                              </div>
+                              <p className="text-sm font-bold text-slate-700 dark:text-slate-200 leading-snug line-clamp-2">{q.question_text}</p>
+                            </div>
+                            <ChevronRight size={16} className="text-slate-300 dark:text-slate-700 group-open:rotate-90 transition-transform shrink-0 mt-1"/>
+                          </summary>
+
+                          {/* Conteúdo expandido */}
+                          <div className="px-5 pb-5 pl-[68px] space-y-3">
+                            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{q.question_text}</p>
+
+                            {q.type === 'objective' && q.options && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {['a','b','c','d','e'].map(key => {
+                                  const val = q.options?.[key];
+                                  if (!val) return null;
+                                  const isCorrect = key === q.correct_option;
+                                  return (
+                                    <div key={key} className={`p-3 rounded-xl text-xs font-medium border flex items-center gap-3 ${isCorrect ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
+                                      <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-black uppercase shrink-0 ${isCorrect ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-900 text-slate-400'}`}>{key}</span>
+                                      <span className="leading-snug">{val}</span>
                                     </div>
-                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 leading-relaxed">
-                                      {q.question_text}
-                                    </p>
-                                 </div>
-                                 <button 
-                                   onClick={() => handleDeleteQuestion(q.id)}
-                                   className="p-2 text-slate-300 hover:text-red-500 transition-colors cursor-pointer"
-                                 >
-                                   <Trash2 size={18}/>
-                                 </button>
-                               </div>
-                               
-                               {q.type === 'objective' && (
-                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">
-                                   {['a', 'b', 'c', 'd', 'e'].map((key) => {
-                                     const val = q.options?.[key];
-                                     if (!val) return null;
-                                     return (
-                                       <div 
-                                         key={key} 
-                                         className={`p-3 rounded-xl text-xs font-bold border flex items-center gap-3 ${
-                                           key === q.correct_option 
-                                             ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 shadow-sm' 
-                                             : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-500'
-                                         }`}
-                                       >
-                                         <div className={`w-6 h-6 rounded-lg flex items-center justify-center uppercase ${
-                                            key === q.correct_option ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-                                         }`}>
-                                           {key}
-                                         </div>
-                                         {val}
-                                       </div>
-                                     );
-                                   })}
-                                 </div>
-                               )}
-                             </div>
-                           ))
-                         }
-                       </div>
-                     )}
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {q.explanation && (
+                              <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl p-3">
+                                <p className="text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">💡 Comentário</p>
+                                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{q.explanation}</p>
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-2 pt-2">
+                              <button
+                                onClick={() => { setReuseModalQuestion(q); setReuseTargetLessonId(''); }}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-vibe text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-glow-purple hover:scale-105 transition-all"
+                              >
+                                ♻️ Reutilizar em outra aula
+                              </button>
+                              <button
+                                onClick={() => handleDeleteQuestion(q.id)}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-xl font-black text-[10px] uppercase tracking-widest border border-red-200 dark:border-red-800/40 transition-all"
+                              >
+                                <Trash2 size={12}/> Excluir
+                              </button>
+                              {q.lesson_id && (
+                                <span className="ml-auto text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                  Vinculada a: {q.lesson_id}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
                   </div>
-            </div>
-          </div>
-          )}
+                )}
+
+                {/* Empty state global */}
+                {visibleQs.length === 0 && (
+                  <div className="bg-white dark:bg-slate-900 rounded-[40px] border-2 border-dashed dark:border-slate-800 p-12 text-center">
+                    <Database className="mx-auto text-slate-300 dark:text-slate-700 mb-3" size={40}/>
+                    <p className="font-black text-slate-700 dark:text-slate-200 tracking-tight">Banco vazio</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">
+                      Vá em <strong>Plano de Aulas</strong> → escolha uma aula → <strong>Editar Atividade</strong> para começar a cadastrar questões.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {activeTab === 'submissions' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -2557,6 +2779,83 @@ export const AdminDashboard: React.FC = () => {
                  </div>
               </div>
            </div>
+        </div>
+      )}
+
+      {/* Modal: Reutilizar Questão em outra aula */}
+      {reuseModalQuestion && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300"
+          style={{ background: 'rgba(2, 6, 23, 0.85)', backdropFilter: 'blur(16px)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setReuseModalQuestion(null); }}
+        >
+          <div
+            className="relative bg-white dark:bg-slate-900 w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative p-5 text-white" style={{ background: 'linear-gradient(135deg, #FF3D8A 0%, #8B5CF6 50%, #22D3EE 100%)' }}>
+              <div className="flex justify-between items-center">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black text-white/85 uppercase tracking-[0.3em] mb-1">♻️ Reutilizar Questão</p>
+                  <h3 className="font-black text-white text-base truncate">Escolha a aula alvo</h3>
+                </div>
+                <button onClick={() => setReuseModalQuestion(null)} className="p-2 bg-white/15 hover:bg-white/25 rounded-xl text-white shrink-0">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <p className="text-[9px] font-black text-vibe-purple uppercase tracking-widest mb-2">Questão a reutilizar:</p>
+                <p className="text-sm text-slate-700 dark:text-slate-200 font-medium line-clamp-3">{reuseModalQuestion.question_text}</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">
+                  {subjectsInfo[reuseModalQuestion.subject as Subject]?.icon} {subjectsInfo[reuseModalQuestion.subject as Subject]?.name} · {reuseModalQuestion.type === 'objective' ? 'Objetiva' : 'Discursiva'}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest mb-2 block">Aula alvo</label>
+                <select
+                  value={reuseTargetLessonId}
+                  onChange={e => setReuseTargetLessonId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-purple-100"
+                >
+                  <option value="">— Selecione a aula —</option>
+                  {curriculumData.flatMap(grade =>
+                    grade.bimesters.flatMap(b =>
+                      b.lessons
+                        .filter(l => l.subject === reuseModalQuestion.subject)
+                        .map(l => (
+                          <option key={l.id} value={l.id}>
+                            {grade.id}ª Série · B{b.id} · {(lessonOverrides[l.id]?.title || l.title).slice(0, 80)}
+                          </option>
+                        ))
+                    )
+                  )}
+                </select>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2 ml-2 italic">
+                  A questão será DUPLICADA pra aula escolhida. A original permanece intacta.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 border-t dark:border-slate-800 flex gap-3">
+              <button
+                onClick={() => setReuseModalQuestion(null)}
+                className="flex-1 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black text-[10px] uppercase tracking-widest hover:scale-[1.02] transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleReuseQuestion}
+                disabled={!reuseTargetLessonId || isReusing}
+                className="flex-1 py-3 rounded-2xl bg-gradient-vibe text-white font-black text-[10px] uppercase tracking-widest shadow-glow-purple hover:scale-[1.02] hover:shadow-glow-pink transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isReusing ? <Loader2 className="animate-spin" size={14}/> : '♻️'} Reutilizar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
