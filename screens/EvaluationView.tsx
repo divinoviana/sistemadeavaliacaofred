@@ -5,14 +5,14 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { subjectsInfo } from '../data';
 import { Subject } from '../types';
-import { ArrowLeft, BrainCircuit, CheckCircle2, Clock, Send, Loader2, Award, Info, Lock } from 'lucide-react';
+import { ArrowLeft, BrainCircuit, CheckCircle2, Clock, Send, Loader2, Award, Info, Lock, AlertTriangle, Pencil, ShieldAlert } from 'lucide-react';
 import { VisualActivityRenderer } from '../components/VisualActivityRenderer';
 
 export const EvaluationView: React.FC = () => {
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
   const { student, isLoading: isAuthLoading } = useAuth();
-  
+
   const [exam, setExam] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,6 +20,10 @@ export const EvaluationView: React.FC = () => {
   const [score, setScore] = useState(0);
   const [alreadyDone, setAlreadyDone] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(true);
+  // Segurança das redações: contar saídas de aba/janela
+  const [tabSwitches, setTabSwitches] = useState(0);
+  const [pasteAttempts, setPasteAttempts] = useState(0);
+  const isEssay = exam?.type === 'essay' || (exam?.questions?.[0]?.type === 'essay');
 
   useEffect(() => {
     if (!isAuthLoading && !student) {
@@ -28,6 +32,20 @@ export const EvaluationView: React.FC = () => {
       checkAttemptAndFetchExam();
     }
   }, [examId, student, isAuthLoading]);
+
+  // Segurança da redação: contar saídas da aba/janela enquanto a tela
+  // estiver aberta e o aluno ainda não enviou. Só ativa quando é
+  // redação (isEssay).
+  useEffect(() => {
+    if (!isEssay || isFinished) return;
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        setTabSwitches(n => n + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [isEssay, isFinished]);
 
   const checkAttemptAndFetchExam = async () => {
     if (!examId || !student) return;
@@ -46,15 +64,34 @@ export const EvaluationView: React.FC = () => {
       }
       setExam(examData);
 
-      const examTitle = `Avaliação Bimestral: ${examData.bimester}º Bimestre`.trim();
-      const { data: existing, error: subErr } = await supabase
+      // Detecta tipo (redação vs simulado) e monta o título esperado da submissão
+      const isEssayExam = examData.type === 'essay' || (examData.questions?.[0]?.type === 'essay');
+      const expectedTitle = isEssayExam
+        ? `Redação: ${(examData.title || 'Redação').trim()}`
+        : (examData.title?.trim() || `Avaliação Bimestral: ${examData.bimester}º Bimestre`);
+
+      // Checa por submissão prévia: tenta pelo lesson_id do exame (mais confiável);
+      // se nada, fallback pelo título.
+      let existing: any[] | null = null;
+      const r1 = await supabase
         .from('submissions')
         .select('score')
         .eq('student_id', student.id)
-        .eq('subject', examData.subject)
-        .eq('lesson_title', examTitle)
+        .eq('lesson_id', examId!)
         .limit(1);
-      if (subErr) throw subErr;
+      if (!r1.error && r1.data && r1.data.length > 0) {
+        existing = r1.data;
+      } else {
+        const r2 = await supabase
+          .from('submissions')
+          .select('score')
+          .eq('student_id', student.id)
+          .eq('subject', examData.subject)
+          .eq('lesson_title', expectedTitle)
+          .limit(1);
+        if (r2.error) throw r2.error;
+        existing = r2.data;
+      }
 
       if (existing && existing.length > 0) {
         setScore(existing[0].score ?? 0);
@@ -73,7 +110,61 @@ export const EvaluationView: React.FC = () => {
     setAnswers(prev => ({ ...prev, [questionId]: option }));
   };
 
+  // Submissão específica de Redação (texto livre, sem correção automática)
+  const handleSubmitEssay = async () => {
+    const essayText = String(answers[1] || '').trim();
+    if (essayText.length < 200) {
+      alert('Sua redação está muito curta (mínimo de 200 caracteres). Desenvolva mais o texto.');
+      return;
+    }
+    if (!confirm('Tem certeza que quer enviar? Você só tem UMA tentativa para esta redação.')) return;
+    setIsSubmitting(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const title = exam.title || 'Redação';
+      const wordCount = essayText.split(/\s+/).filter(Boolean).length;
+      const charCount = essayText.length;
+
+      const { error } = await supabase.from('submissions').insert({
+        student_id: student.id,
+        student_name: student.name.trim(),
+        school_class: student.school_class.trim(),
+        grade: student.grade,
+        lesson_id: examId,
+        lesson_title: `Redação: ${title}`,
+        subject: exam.subject,
+        score: 0, // Professor avalia depois
+        content: [{
+          question: title,
+          answer: essayText,
+          tab_switches: tabSwitches,
+          paste_attempts: pasteAttempts,
+          word_count: wordCount,
+          char_count: charCount,
+        }],
+        ai_feedback: {
+          generalComment: `Redação enviada. ${wordCount} palavras, ${charCount} caracteres. Aluno saiu da tela ${tabSwitches} ${tabSwitches === 1 ? 'vez' : 'vezes'} e tentou colar texto externo ${pasteAttempts} ${pasteAttempts === 1 ? 'vez' : 'vezes'}.`,
+          corrections: [],
+        },
+        teacher_feedback: null,
+        submitted_at: nowIso,
+        submission_date: nowIso,
+        status: 'pending',
+      });
+      if (error) throw error;
+      setIsFinished(true);
+    } catch (err: any) {
+      alert('Falha ao enviar redação: ' + (err?.message || 'tente novamente.'));
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async () => {
+    // Redação: caminho próprio (sem corrigir)
+    if (isEssay) return handleSubmitEssay();
+
     // Conta quantas questões devem ter resposta (todas as do exam)
     const totalQuestions = exam.questions.length;
     const answeredCount = exam.questions.filter((q: any) => {
@@ -250,7 +341,96 @@ export const EvaluationView: React.FC = () => {
       </div>
 
       <div className="container mx-auto max-w-3xl px-4 -mt-8">
-        {!isFinished ? (
+        {!isFinished && isEssay ? (
+          /* ============== REDAÇÃO ============== */
+          <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+            {/* Aviso de regras de segurança */}
+            <div className="bg-gradient-fire p-1 rounded-3xl shadow-glow-orange">
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-[20px]">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 bg-gradient-fire rounded-2xl flex items-center justify-center text-white shadow-glow-orange shrink-0">
+                    <ShieldAlert size={22}/>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-black text-slate-800 dark:text-white text-base tracking-tight">⚠️ Modo Redação · Atenção</h3>
+                    <ul className="text-xs text-slate-600 dark:text-slate-400 font-medium mt-2 space-y-1 leading-relaxed">
+                      <li>• <strong>Não é permitido colar texto</strong> de fora (a área bloqueia automaticamente).</li>
+                      <li>• Cada vez que você sair desta janela / mudar de aba, fica registrado e o professor é avisado.</li>
+                      <li>• Você tem <strong>uma única tentativa</strong>. Escreva com calma.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card principal da redação */}
+            <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+              <div className="p-6 border-b dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
+                <p className="text-[10px] font-black text-vibe-orange uppercase tracking-[0.3em] mb-1">✍️ Tema da Redação</p>
+                <h2 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight leading-tight font-display">
+                  {exam.title || exam.questions?.[0]?.questionText || 'Redação'}
+                </h2>
+                {exam.questions?.[0]?.instructions && (
+                  <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+                    <p className="text-xs font-bold text-blue-900 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">{exam.questions[0].instructions}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6">
+                {/* Métricas em tempo real */}
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3 px-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                      {String(answers[1] || '').length} caracteres · {String(answers[1] || '').split(/\s+/).filter(Boolean).length} palavras
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {tabSwitches > 0 && (
+                      <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                        <AlertTriangle size={11}/> {tabSwitches} saída{tabSwitches > 1 ? 's' : ''} de tela
+                      </span>
+                    )}
+                    {pasteAttempts > 0 && (
+                      <span className="inline-flex items-center gap-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                        🚫 {pasteAttempts} tentativa{pasteAttempts > 1 ? 's' : ''} de colar
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Textarea com bloqueio de paste e tracking */}
+                <textarea
+                  value={String(answers[1] || '')}
+                  onChange={e => setAnswers(prev => ({ ...prev, 1: e.target.value }))}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    setPasteAttempts(n => n + 1);
+                    alert('🚫 Não é permitido colar texto na redação. Digite o seu próprio texto.');
+                  }}
+                  onDrop={(e) => { e.preventDefault(); }}
+                  onContextMenu={(e) => e.preventDefault()}
+                  placeholder="Escreva aqui sua redação… (mínimo 200 caracteres)"
+                  rows={30}
+                  spellCheck={true}
+                  autoCorrect="off"
+                  autoComplete="off"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-2xl p-5 text-base text-slate-700 dark:text-slate-200 outline-none focus:border-vibe-orange focus:ring-4 focus:ring-orange-100 dark:focus:ring-orange-900/10 leading-loose font-serif"
+                  style={{ minHeight: '650px' }}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="w-full bg-gradient-fire text-white py-6 rounded-[32px] font-black uppercase tracking-[0.25em] text-sm shadow-glow-orange hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
+            >
+              {isSubmitting ? <Loader2 className="animate-spin"/> : <Send size={20}/>}
+              ✍️ Enviar Redação ao Professor
+            </button>
+          </div>
+        ) : !isFinished ? (
            <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
               <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl flex items-center justify-between border-2 border-indigo-100 dark:border-indigo-900 transition-colors duration-300">
                  <div className="flex items-center gap-3">
@@ -344,26 +524,37 @@ export const EvaluationView: React.FC = () => {
               </>
             )}
             <div className="relative bg-white dark:bg-slate-900 rounded-[40px] p-12 text-center">
-              <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl animate-float ${alreadyDone ? 'bg-gradient-aurora text-white shadow-glow-cyan' : 'bg-gradient-fire text-white shadow-glow-orange'}`}>
-                 {alreadyDone ? <Lock size={48}/> : <CheckCircle2 size={56} strokeWidth={2.5}/>}
+              <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl animate-float ${alreadyDone ? 'bg-gradient-aurora text-white shadow-glow-cyan' : isEssay ? 'bg-gradient-fire text-white shadow-glow-orange' : 'bg-gradient-fire text-white shadow-glow-orange'}`}>
+                 {alreadyDone ? <Lock size={48}/> : isEssay ? <Pencil size={48} strokeWidth={2.5}/> : <CheckCircle2 size={56} strokeWidth={2.5}/>}
               </div>
               <h2 className="text-4xl md:text-5xl font-black tracking-tighter mb-3 font-display">
                 <span className={alreadyDone ? 'text-gradient-aurora' : 'text-gradient-sunset'}>
-                  {alreadyDone ? '🔒 Prova já Realizada' : '🎉 Mandou bem!'}
+                  {alreadyDone
+                    ? (isEssay ? '🔒 Redação já Enviada' : '🔒 Prova já Realizada')
+                    : (isEssay ? '✍️ Redação Enviada!' : '🎉 Mandou bem!')}
                 </span>
               </h2>
               <p className="text-slate-500 dark:text-slate-400 font-bold text-sm tracking-wide mb-2 max-w-md mx-auto">
-                {alreadyDone ? 'Você já usou sua única chance nesta disciplina.' : 'Sua resposta foi enviada e a IA já corrigiu!'}
+                {alreadyDone
+                  ? 'Você já usou sua única chance.'
+                  : isEssay
+                    ? 'Sua redação foi enviada. O professor vai avaliar em breve.'
+                    : 'Sua resposta foi enviada e a IA já corrigiu!'}
               </p>
-              {!alreadyDone && score > 0 && (
+              {!alreadyDone && !isEssay && score > 0 && (
                 <div className="inline-flex items-center gap-3 bg-gradient-fire text-white px-8 py-4 rounded-full shadow-glow-orange mt-4 mb-8 animate-pulse-glow">
                   <Award size={24}/>
                   <span className="text-3xl font-black tracking-tighter">{score.toFixed(1)}</span>
                   <span className="text-[10px] font-black uppercase tracking-widest opacity-90">/ 10</span>
                 </div>
               )}
+              {!alreadyDone && isEssay && tabSwitches > 0 && (
+                <div className="inline-flex items-center gap-2 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-5 py-2.5 rounded-full mt-4 mb-2 text-xs font-black uppercase tracking-widest">
+                  <AlertTriangle size={14}/> Você saiu da tela {tabSwitches} {tabSwitches === 1 ? 'vez' : 'vezes'}
+                </div>
+              )}
               {alreadyDone && (
-                <p className="text-slate-400 dark:text-slate-500 font-black uppercase text-[10px] tracking-[0.3em] mb-8">Sua nota já está no histórico</p>
+                <p className="text-slate-400 dark:text-slate-500 font-black uppercase text-[10px] tracking-[0.3em] mb-8">{isEssay ? 'Aguardando avaliação do professor' : 'Sua nota já está no histórico'}</p>
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-md mx-auto">

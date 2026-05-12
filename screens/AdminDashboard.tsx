@@ -138,7 +138,7 @@ export const AdminDashboard: React.FC = () => {
   const isSuper = student?.email === 'admin@admin.com' || student?.email === 'divinoviana@gmail.com';
 
   // Estados principais
-  const [activeTab, setActiveTab] = useState<'question_bank' | 'submissions' | 'students' | 'messages' | 'lessons_list' | 'exam_generator' | 'reports' | 'evaluations'>('lessons_list');
+  const [activeTab, setActiveTab] = useState<'question_bank' | 'submissions' | 'students' | 'messages' | 'lessons_list' | 'exam_generator' | 'essays' | 'reports' | 'evaluations'>('lessons_list');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClass, setFilterClass] = useState('all');
@@ -201,6 +201,15 @@ export const AdminDashboard: React.FC = () => {
   const [isGeneratingExam, setIsGeneratingExam] = useState(false);
   const [isPublishingExam, setIsPublishingExam] = useState(false);
   const [publishedExams, setPublishedExams] = useState<any[]>([]);
+
+  // ── Redação ────────────────────────────────────
+  const [essayTitle, setEssayTitle] = useState('');
+  const [essayGrade, setEssayGrade] = useState('1');
+  const [essayBimester, setEssayBimester] = useState('1');
+  const [essayClass, setEssayClass] = useState('all');
+  const [essayInstructions, setEssayInstructions] = useState('');
+  const [isPublishingEssay, setIsPublishingEssay] = useState(false);
+  const [publishedEssays, setPublishedEssays] = useState<any[]>([]);
   
   const [reportTarget, setReportTarget] = useState<'student' | 'class'>('student');
   const [selectedReportStudent, setSelectedReportStudent] = useState('');
@@ -644,6 +653,15 @@ export const AdminDashboard: React.FC = () => {
 
   const handleAddQuestionToDraft = async () => {
     if (!newQuestion.question_text.trim() || isSavingActivity) return;
+    // Discursiva não precisa de alternativas válidas
+    if (newQuestion.type === 'objective') {
+      const filled = Object.values(newQuestion.options || {}).filter((v: any) => (v || '').trim()).length;
+      if (filled < 2) { alert('Preencha pelo menos 2 alternativas.'); return; }
+      if (!newQuestion.options?.[newQuestion.correct_option]?.trim()) {
+        alert('A alternativa marcada como correta está vazia.');
+        return;
+      }
+    }
     setIsSavingActivity(true);
     try {
       const qData: any = {
@@ -652,6 +670,11 @@ export const AdminDashboard: React.FC = () => {
         topic: selectedLessonForEdit.title,
         lesson_id: selectedLessonForEdit.id,
       };
+      // Discursiva: limpa campos que só fazem sentido em objetiva
+      if (newQuestion.type === 'discursive') {
+        qData.options = null;
+        qData.correct_option = null;
+      }
 
       const { data: insertedQ, error: insertErr } = await supabase
         .from('questions')
@@ -754,16 +777,89 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Lista todos os simulados já publicados (filtrados por matéria do prof)
+  // Lista todos os simulados e redações já publicados (filtrados por matéria do prof).
+  // bimonthly_exams.type ∈ {'exam','essay'} — separa nos dois states.
   const fetchPublishedExams = async () => {
     try {
       let qb = supabase.from('bimonthly_exams').select('*').order('created_at', { ascending: false });
       if (!isSuper && teacherSubject) qb = qb.eq('subject', teacherSubject);
       const { data, error } = await qb;
       if (error) throw error;
-      setPublishedExams(data || []);
+      const all = data || [];
+      // Quando a coluna `type` não existe (schema antigo), tudo conta como 'exam'.
+      setPublishedExams(all.filter((e: any) => (e.type || 'exam') === 'exam'));
+      setPublishedEssays(all.filter((e: any) => e.type === 'essay'));
     } catch (e) {
-      console.error('Erro ao buscar simulados:', e);
+      console.error('Erro ao buscar simulados/redações:', e);
+    }
+  };
+
+  // ============================================================
+  // REDAÇÃO — Publicação + listagem + remoção
+  // ============================================================
+  const handlePublishEssay = async () => {
+    if (isPublishingEssay) return;
+    const title = essayTitle.trim();
+    if (!title) { alert('Digite o título da redação.'); return; }
+    if (!confirm(`Publicar a redação "${title}" para os alunos?`)) return;
+    setIsPublishingEssay(true);
+    try {
+      const payload: any = {
+        subject: teacherSubject || 'Geral',
+        grade: String(essayGrade),
+        bimester: String(essayBimester),
+        type: 'essay',
+        title,
+        school_class: essayClass === 'all' ? null : essayClass,
+        topics: [],
+        // Pra reusar a infra do simulado, guardamos a redação como
+        // uma única "questão" do tipo essay com o título no enunciado.
+        questions: [{
+          id: 1,
+          type: 'essay',
+          questionText: title,
+          instructions: essayInstructions.trim() || null,
+          lines: 30,
+        }],
+      };
+
+      // Tolerante a schema sem coluna `type`
+      let attempts = 0;
+      let lastError: any = null;
+      while (attempts < 6) {
+        const r = await supabase.from('bimonthly_exams').insert(payload);
+        if (!r.error) { lastError = null; break; }
+        lastError = r.error;
+        const m = String(r.error.message || '').match(/'([^']+)' column of/i);
+        const missingCol = m?.[1];
+        if (missingCol && (missingCol in payload)) {
+          console.warn(`[essay] coluna ${missingCol} faltando — removendo do payload`);
+          delete payload[missingCol];
+          attempts++;
+        } else break;
+      }
+      if (lastError) throw lastError;
+
+      alert('Redação publicada! Os alunos já podem fazer.');
+      setEssayTitle('');
+      setEssayInstructions('');
+      fetchPublishedExams();
+    } catch (e: any) {
+      alert('Erro ao publicar redação: ' + (e?.message || ''));
+      console.error(e);
+    } finally {
+      setIsPublishingEssay(false);
+    }
+  };
+
+  const handleDeletePublishedEssay = async (id: string) => {
+    if (!confirm('Excluir esta redação? Respostas dos alunos serão mantidas.')) return;
+    try {
+      const { error } = await supabase.from('bimonthly_exams').delete().eq('id', id);
+      if (error) throw error;
+      fetchPublishedExams();
+    } catch (e: any) {
+      alert('Erro ao excluir: ' + e.message);
     }
   };
 
@@ -850,6 +946,7 @@ export const AdminDashboard: React.FC = () => {
         subject: teacherSubject || 'Geral',
         grade: String(examGrade),
         bimester: String(examBimester),
+        type: 'exam',
         title: examTitle.trim() || `Simulado - ${examBimester}º Bimestre`,
         school_class: examClass === 'all' ? null : examClass,
         topics: examTopics.split(',').map(t => t.trim()).filter(Boolean),
@@ -1229,6 +1326,7 @@ export const AdminDashboard: React.FC = () => {
               { id: 'students',       icon: UserCircle,   label: 'Estudantes',       grad: 'bg-gradient-vibe',    glow: 'shadow-glow-pink' },
               { id: 'messages',       icon: MessageSquare,label: 'Mensagens',        grad: 'bg-gradient-mint',    glow: 'shadow-glow-lime' },
               { id: 'exam_generator', icon: BrainCircuit, label: 'Simulados',        grad: 'bg-gradient-sunset',  glow: 'shadow-glow-pink' },
+              { id: 'essays',         icon: FileText,     label: 'Redação',          grad: 'bg-gradient-fire',    glow: 'shadow-glow-orange' },
               { id: 'reports',        icon: BarChart3,    label: 'Relatórios IA',    grad: 'bg-gradient-cosmic',  glow: 'shadow-glow-purple' },
             ].map(item => {
               const isActive = activeTab === item.id;
@@ -1273,6 +1371,7 @@ export const AdminDashboard: React.FC = () => {
                   {activeTab === 'students' && '👥 Carômetro'}
                   {activeTab === 'messages' && '💬 Central de Dúvidas'}
                   {activeTab === 'exam_generator' && '🎯 Simulados'}
+                  {activeTab === 'essays' && '✍️ Redação'}
                   {activeTab === 'reports' && '📊 Análise de Progresso'}
                 </span>
               </h2>
@@ -2072,6 +2171,120 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
 
+          {activeTab === 'essays' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-3xl mx-auto">
+              {/* Editor */}
+              <div className="relative overflow-hidden bg-gradient-fire p-1 rounded-[40px] shadow-glow-orange">
+                <div className="bg-white dark:bg-slate-900 rounded-[36px] p-8">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-12 h-12 bg-gradient-fire rounded-2xl flex items-center justify-center text-white shadow-glow-orange shrink-0">
+                      <Pencil size={22}/>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black tracking-tighter font-display">
+                        <span className="text-gradient-sunset">✍️ Nova Redação</span>
+                      </h2>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mt-1">Crie só o título; o aluno escreve em 30 linhas</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Título da Redação</label>
+                      <input
+                        type="text"
+                        placeholder='Ex.: "O papel da juventude na transformação social"'
+                        value={essayTitle}
+                        onChange={e => setEssayTitle(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-orange-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Instruções (opcional)</label>
+                      <textarea
+                        placeholder="Orientações pro aluno (gênero textual, perspectiva, número de linhas mínimo etc.)…"
+                        rows={3}
+                        value={essayInstructions}
+                        onChange={e => setEssayInstructions(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-5 py-3 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-orange-100"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <select value={essayGrade} onChange={e => setEssayGrade(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
+                        <option value="1">1ª Série</option>
+                        <option value="2">2ª Série</option>
+                        <option value="3">3ª Série</option>
+                      </select>
+                      <select value={essayBimester} onChange={e => setEssayBimester(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
+                        <option value="1">1º Bimestre</option>
+                        <option value="2">2º Bimestre</option>
+                        <option value="3">3º Bimestre</option>
+                        <option value="4">4º Bimestre</option>
+                      </select>
+                      <select value={essayClass} onChange={e => setEssayClass(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
+                        <option value="all">Todas as Turmas</option>
+                        {classOptions.map(c => <option key={c} value={c}>Turma {c}</option>)}
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={handlePublishEssay}
+                      disabled={isPublishingEssay || !essayTitle.trim()}
+                      className="w-full bg-gradient-vibe text-white py-5 rounded-2xl font-black uppercase text-xs tracking-[0.25em] shadow-glow-purple hover:scale-[1.02] hover:shadow-glow-pink transition-all flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isPublishingEssay ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>}
+                      ✨ Publicar Redação para Alunos
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Aviso de segurança */}
+              <div className="bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-800/40 rounded-3xl p-5">
+                <p className="text-xs text-amber-700 dark:text-amber-300 font-bold leading-relaxed flex items-start gap-2">
+                  <span className="text-lg">🛡️</span>
+                  <span><strong>Segurança da redação:</strong> a tela do aluno bloqueia colar texto externo e conta quantas vezes ele sai da janela / muda de aba durante a escrita. Esse número aparece na submissão pra você avaliar.</span>
+                </p>
+              </div>
+
+              {/* Lista de redações publicadas */}
+              {publishedEssays.length > 0 && (
+                <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-6 shadow-sm">
+                  <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-tight mb-4 flex items-center gap-2">
+                    <Library size={16} className="text-vibe-orange"/> Redações Publicadas ({publishedEssays.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {publishedEssays.map((es: any) => (
+                      <div key={es.id} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-11 h-11 bg-gradient-fire rounded-xl flex items-center justify-center text-white shadow-md shrink-0">
+                            <Pencil size={18}/>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-black text-slate-800 dark:text-slate-100 text-sm truncate">{es.title}</p>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                              {es.bimester}º Bimestre · {es.grade}ª Série · {es.school_class || 'Todas as turmas'}
+                              {es.created_at && ` · ${new Date(es.created_at).toLocaleDateString('pt-BR')}`}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDeletePublishedEssay(es.id)}
+                          className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                          title="Excluir redação"
+                        >
+                          <Trash2 size={16}/>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'reports' && (
              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl mx-auto">
                 <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-10 shadow-sm">
@@ -2276,39 +2489,61 @@ export const AdminDashboard: React.FC = () => {
                     </h4>
 
                     <div className="space-y-4">
+                       {/* Toggle tipo de questão */}
+                       <div className="flex gap-2">
+                         {(['objective','discursive'] as const).map(t => (
+                           <button
+                             key={t}
+                             onClick={() => setNewQuestion({...newQuestion, type: t})}
+                             className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${newQuestion.type === t ? 'bg-tocantins-blue text-white border-tocantins-blue' : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700'}`}
+                           >
+                             {t === 'objective' ? '☑️ Objetiva (A–E)' : '✍️ Discursiva'}
+                           </button>
+                         ))}
+                       </div>
+
                        <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Enunciado</label>
-                          <textarea 
+                          <textarea
                             value={newQuestion.question_text}
                             onChange={e => setNewQuestion({...newQuestion, question_text: e.target.value})}
-                            placeholder="Escreva a pergunta aqui..."
+                            placeholder={newQuestion.type === 'discursive' ? 'Pergunta argumentativa que o aluno responderá com texto livre…' : 'Escreva a pergunta aqui…'}
                             className="w-full bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10 min-h-[100px]"
                           />
                        </div>
 
-                       <div className="space-y-3">
-                          <p className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest mb-1 italic">Dica: Clique na letra para marcar a correta</p>
-                          {['a', 'b', 'c', 'd', 'e'].map(opt => (
-                            <div key={opt} className="flex items-center gap-3">
-                               <button 
-                                 onClick={() => setNewQuestion({...newQuestion, correct_option: opt})}
-                                 className={`w-10 h-10 rounded-xl font-black text-xs shadow-sm transition-all ${newQuestion.correct_option === opt ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-800 text-slate-400'}`}
-                               >
-                                 {opt.toUpperCase()}
-                               </button>
-                               <input 
-                                 type="text" 
-                                 value={newQuestion.options[opt]}
-                                 onChange={e => setNewQuestion({
-                                   ...newQuestion, 
-                                   options: {...newQuestion.options, [opt]: e.target.value}
-                                 })}
-                                 placeholder={`Opção ${opt.toUpperCase()}`}
-                                 className="flex-1 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
-                               />
-                            </div>
-                          ))}
-                       </div>
+                       {newQuestion.type === 'objective' && (
+                         <div className="space-y-3">
+                            <p className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest mb-1 italic">Dica: Clique na letra para marcar a correta</p>
+                            {['a', 'b', 'c', 'd', 'e'].map(opt => (
+                              <div key={opt} className="flex items-center gap-3">
+                                 <button
+                                   onClick={() => setNewQuestion({...newQuestion, correct_option: opt})}
+                                   className={`w-10 h-10 rounded-xl font-black text-xs shadow-sm transition-all ${newQuestion.correct_option === opt ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-800 text-slate-400'}`}
+                                 >
+                                   {opt.toUpperCase()}
+                                 </button>
+                                 <input
+                                   type="text"
+                                   value={newQuestion.options[opt]}
+                                   onChange={e => setNewQuestion({
+                                     ...newQuestion,
+                                     options: {...newQuestion.options, [opt]: e.target.value}
+                                   })}
+                                   placeholder={`Opção ${opt.toUpperCase()}`}
+                                   className="flex-1 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
+                                 />
+                              </div>
+                            ))}
+                         </div>
+                       )}
+                       {newQuestion.type === 'discursive' && (
+                         <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40 rounded-2xl p-4">
+                           <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold leading-relaxed">
+                             ✍️ <strong>Questão discursiva:</strong> o aluno responderá com texto livre. A IA fará a correção inicial; você poderá revisar a nota depois.
+                           </p>
+                         </div>
+                       )}
 
                        <button 
                          onClick={handleAddQuestionToDraft}

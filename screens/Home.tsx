@@ -47,9 +47,11 @@ export const Home: React.FC = () => {
         .eq('student_id', student.id);
       if (subsErr) throw subsErr;
 
+      // Considera tanto simulados ("Avaliação Bimestral" / título custom)
+      // quanto redações ("Redação: <título>") como já realizados.
       const subData = (subsData || [])
         .map((s: any) => (s.lesson_title || '').trim())
-        .filter((title: string) => title.startsWith('Avaliação Bimestral'));
+        .filter((title: string) => title.length > 0);
 
       setExams(examData);
       setFinishedExamTitles(subData);
@@ -100,10 +102,16 @@ export const Home: React.FC = () => {
   if (isLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin"/></div>;
   if (!student) return null;
 
-  // Filtra apenas provas que ele AINDA NÃO fez
+  // Filtra apenas avaliações que ele AINDA NÃO fez.
+  // Funciona tanto para simulados quanto para redações:
+  //   - redação:  lesson_title = "Redação: <título>"
+  //   - simulado: lesson_title = "Avaliação Bimestral: Xº Bimestre" (ou customizado)
   const pendingExams = exams.filter(e => {
-    const title = `Avaliação Bimestral: ${e.bimester}º Bimestre`;
-    return !finishedExamTitles.includes(title.trim());
+    const isEssayItem = e.type === 'essay' || e.questions?.[0]?.type === 'essay';
+    const expectedTitle = isEssayItem
+      ? `Redação: ${(e.title || 'Redação').trim()}`
+      : (e.title?.trim() || `Avaliação Bimestral: ${e.bimester}º Bimestre`);
+    return !finishedExamTitles.includes(expectedTitle.trim());
   });
 
   return (
@@ -134,28 +142,35 @@ export const Home: React.FC = () => {
                     <h3 className="text-2xl font-black tracking-tighter font-display">
                       <span className="text-gradient-sunset">🔥 Avaliações Pendentes</span>
                     </h3>
-                    <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-[0.25em] mt-1">Simulados bimestrais te esperando</p>
+                    <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-[0.25em] mt-1">Simulados e redações pra fazer</p>
                  </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 {pendingExams.map(exam => (
-                    <Link 
-                      key={exam.id} 
+                 {pendingExams.map(exam => {
+                   const isEssayItem = exam.type === 'essay' || exam.questions?.[0]?.type === 'essay';
+                   return (
+                    <Link
+                      key={exam.id}
                       to={`/evaluation/${exam.id}`}
                       className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-amber-100 dark:border-amber-900 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-lg transition-all group flex items-center justify-between"
                     >
-                       <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 ${subjectsInfo[exam.subject as Subject].color} rounded-xl flex items-center justify-center text-white text-xl`}>
-                             {subjectsInfo[exam.subject as Subject].icon}
+                       <div className="flex items-center gap-4 min-w-0">
+                          <div className={`w-10 h-10 ${isEssayItem ? 'bg-gradient-fire' : subjectsInfo[exam.subject as Subject].color} rounded-xl flex items-center justify-center text-white text-xl shrink-0`}>
+                             {isEssayItem ? '✍️' : subjectsInfo[exam.subject as Subject].icon}
                           </div>
-                          <div>
-                             <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Simulado {subjectsInfo[exam.subject as Subject].name}</h4>
-                             <p className="text-[10px] font-black text-slate-400 uppercase">{exam.bimester}º Bimestre • {exam.school_class || 'Público Geral'}</p>
+                          <div className="min-w-0">
+                             <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
+                               {isEssayItem ? `Redação: ${exam.title || 'Sem título'}` : (exam.title || `Simulado ${subjectsInfo[exam.subject as Subject]?.name || ''}`)}
+                             </h4>
+                             <p className="text-[10px] font-black text-slate-400 uppercase">
+                               {isEssayItem ? '✍️ Redação · ' : '🎯 Simulado · '}{exam.bimester}º Bimestre · {exam.school_class || 'Todas turmas'}
+                             </p>
                           </div>
                        </div>
-                       <ChevronRight className="text-amber-200 dark:text-amber-800 group-hover:text-vibe-pink group-hover:translate-x-1 transition-all" />
+                       <ChevronRight className="text-amber-200 dark:text-amber-800 group-hover:text-vibe-pink group-hover:translate-x-1 transition-all shrink-0" />
                     </Link>
-                 ))}
+                   );
+                 })}
               </div>
             </div>
            </div>
