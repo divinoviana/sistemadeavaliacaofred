@@ -75,6 +75,41 @@ export interface EvaluationQuestionItem {
 }
 
 // ----------------------------------------------------------------------
+// REDAÇÃO ENEM — 5 competências, 0–200 pontos cada, total 0–1000.
+// ----------------------------------------------------------------------
+export interface EnemCompetency {
+  /** Pontuação 0–200, em múltiplos de 40 */
+  score: number;
+  /** Comentário pedagógico explicando a nota */
+  feedback: string;
+}
+
+export interface EnemEssayEvaluation {
+  /** C1 — Domínio da escrita formal da língua portuguesa */
+  c1: EnemCompetency;
+  /** C2 — Compreender a proposta e aplicar conceitos */
+  c2: EnemCompetency;
+  /** C3 — Selecionar, relacionar e organizar argumentos */
+  c3: EnemCompetency;
+  /** C4 — Mecanismos linguísticos (coesão e coerência) */
+  c4: EnemCompetency;
+  /** C5 — Proposta de intervenção com respeito aos direitos humanos */
+  c5: EnemCompetency;
+  /** Soma das 5 competências (0–1000) */
+  totalScore: number;
+  /** Equivalente em escala 0–10 (totalScore / 100) */
+  score0to10: number;
+  /** Comentário geral sobre o texto */
+  generalComment: string;
+  /** Pontos fortes identificados */
+  strengths: string[];
+  /** Pontos a melhorar */
+  weaknesses: string[];
+  /** Dicas práticas para o aluno */
+  improvementTips: string[];
+}
+
+// ----------------------------------------------------------------------
 // Cliente DeepSeek (REST, formato OpenAI)
 // ----------------------------------------------------------------------
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1';
@@ -590,4 +625,135 @@ Tom: profissional, empático, focado em soluções.`;
       systemPrompt: 'Você é um Coordenador Pedagógico experiente. Produza relatórios analíticos em Markdown bem estruturado, sem inventar dados que não estejam na entrada.',
     });
   });
+};
+
+// ----------------------------------------------------------------------
+// 6) CORREÇÃO DE REDAÇÃO ENEM
+// ----------------------------------------------------------------------
+// Avalia o texto do aluno seguindo a matriz de competências do ENEM.
+// Sempre retorna evaluation completa: se a IA cair, fallback com nota 600
+// e feedback genérico (texto suficiente). Garante que score nunca seja
+// indevidamente 0.
+//
+// Critérios oficiais:
+//   C1 — Demonstrar domínio da modalidade escrita formal da língua portuguesa
+//   C2 — Compreender a proposta e aplicar conceitos das várias áreas de conhecimento
+//   C3 — Selecionar, relacionar, organizar e interpretar informações,
+//        fatos, opiniões e argumentos em defesa de um ponto de vista
+//   C4 — Demonstrar conhecimento dos mecanismos linguísticos necessários
+//        para a construção da argumentação
+//   C5 — Elaborar proposta de intervenção para o problema abordado,
+//        respeitando os direitos humanos
+//
+// Pontuação: 0, 40, 80, 120, 160 ou 200 por competência (total 0–1000).
+// ----------------------------------------------------------------------
+
+function normalizeEnemScore(n: any): number {
+  const x = Math.max(0, Math.min(200, Math.round(Number(n) || 0)));
+  // arredonda para o múltiplo de 40 mais próximo (padrão ENEM)
+  return Math.round(x / 40) * 40;
+}
+
+export const evaluateEssay = async (
+  title: string,
+  essayText: string,
+  instructions?: string
+): Promise<EnemEssayEvaluation> => {
+  const text = String(essayText || '').trim();
+
+  // Fallback: texto muito curto, sem chamar IA
+  if (text.length < 200) {
+    const insufficient: EnemCompetency = {
+      score: 0,
+      feedback: 'Texto muito curto para avaliação por competência.',
+    };
+    return {
+      c1: insufficient, c2: insufficient, c3: insufficient,
+      c4: insufficient, c5: insufficient,
+      totalScore: 0,
+      score0to10: 0,
+      generalComment: 'Redação muito curta. Desenvolva mais o texto para uma avaliação completa.',
+      strengths: [],
+      weaknesses: ['Texto abaixo do mínimo de extensão exigido.'],
+      improvementTips: ['Desenvolva ao menos 25 linhas com introdução, desenvolvimento e conclusão.'],
+    };
+  }
+
+  try {
+    const prompt = `Você é um corretor experiente de redações do ENEM. Avalie a redação abaixo aplicando rigorosamente as 5 competências oficiais (cada uma de 0 a 200 pontos, em múltiplos de 40).
+
+TEMA: "${title}"
+${instructions ? `INSTRUÇÕES DADAS AO ALUNO: "${instructions}"` : ''}
+
+REDAÇÃO DO ALUNO:
+"""
+${text}
+"""
+
+Avalie cada competência e devolva APENAS JSON neste formato exato:
+{
+  "c1": { "score": 0|40|80|120|160|200, "feedback": "comentário curto sobre domínio da norma culta (ortografia, concordância, regência, pontuação)" },
+  "c2": { "score": 0|40|80|120|160|200, "feedback": "comentário sobre compreensão do tema e repertório sociocultural produtivo" },
+  "c3": { "score": 0|40|80|120|160|200, "feedback": "comentário sobre seleção e organização de argumentos em defesa de um ponto de vista" },
+  "c4": { "score": 0|40|80|120|160|200, "feedback": "comentário sobre conectivos, coesão referencial, coerência" },
+  "c5": { "score": 0|40|80|120|160|200, "feedback": "comentário sobre proposta de intervenção (agente, ação, modo, finalidade, detalhamento) e respeito aos direitos humanos" },
+  "generalComment": "balanço geral de 2-3 frases destacando o que mais marcou no texto",
+  "strengths": ["ponto forte 1", "ponto forte 2"],
+  "weaknesses": ["fragilidade 1", "fragilidade 2"],
+  "improvementTips": ["dica prática 1", "dica prática 2", "dica prática 3"]
+}
+
+Regras importantes:
+- Os scores são SEMPRE múltiplos de 40 (0, 40, 80, 120, 160 ou 200).
+- Seja preciso e específico. Não invente trechos que não estão no texto.
+- Em C5, atribua 0 se a proposta violar os direitos humanos; atribua até 200 só se houver agente + ação + modo/meio + finalidade + detalhamento.
+- Em C1, considere desvios graves recorrentes como rebaixadores fortes.`;
+
+    const raw = await withRetry(() => callDeepSeek(prompt, {
+      model: 'deepseek-chat',
+      json: true,
+      temperature: 0.3,
+      maxTokens: 4096,
+      systemPrompt: 'Você é um corretor oficial de redação ENEM. Devolva APENAS JSON válido, sem markdown nem texto extra.',
+    }));
+
+    const parsed = extractJson<any>(raw);
+
+    // Normalizar e validar
+    const comp = (k: 'c1'|'c2'|'c3'|'c4'|'c5'): EnemCompetency => ({
+      score: normalizeEnemScore(parsed?.[k]?.score),
+      feedback: String(parsed?.[k]?.feedback || 'Sem comentário.').slice(0, 1200),
+    });
+    const c1 = comp('c1'), c2 = comp('c2'), c3 = comp('c3'), c4 = comp('c4'), c5 = comp('c5');
+    const totalScore = c1.score + c2.score + c3.score + c4.score + c5.score;
+
+    return {
+      c1, c2, c3, c4, c5,
+      totalScore,
+      score0to10: Math.round((totalScore / 100) * 10) / 10,
+      generalComment: String(parsed?.generalComment || 'Redação avaliada.').slice(0, 2000),
+      strengths: Array.isArray(parsed?.strengths) ? parsed.strengths.slice(0, 5).map((s: any) => String(s).slice(0, 500)) : [],
+      weaknesses: Array.isArray(parsed?.weaknesses) ? parsed.weaknesses.slice(0, 5).map((s: any) => String(s).slice(0, 500)) : [],
+      improvementTips: Array.isArray(parsed?.improvementTips) ? parsed.improvementTips.slice(0, 5).map((s: any) => String(s).slice(0, 500)) : [],
+    };
+  } catch (err: any) {
+    console.warn('[IA] Falha ao corrigir redação ENEM; aplicando fallback:', err);
+    // Fallback: nota intermediária + sinaliza para o professor revisar
+    const wordCount = text.split(/\s+/).filter(Boolean).length;
+    const baseline: number = wordCount >= 200 ? 120 : 80;
+    const fb: EnemCompetency = {
+      score: baseline,
+      feedback: 'Nota provisória — IA indisponível no momento. Aguarde revisão do professor.',
+    };
+    const totalScore = baseline * 5;
+    return {
+      c1: fb, c2: fb, c3: fb, c4: fb, c5: fb,
+      totalScore,
+      score0to10: Math.round((totalScore / 100) * 10) / 10,
+      generalComment: `Redação recebida (${wordCount} palavras). A correção automática por IA está indisponível neste momento — o professor revisará e dará a nota final.`,
+      strengths: [],
+      weaknesses: [],
+      improvementTips: ['Aguarde o feedback detalhado do professor.'],
+    };
+  }
 };

@@ -2823,15 +2823,91 @@ export const AdminDashboard: React.FC = () => {
               </div>
 
               <div className="flex-1 overflow-y-auto p-10 space-y-10">
-                 {/* Feedback da IA (se houver) */}
-                 {viewingSubmission.ai_feedback && (
+                 {/* Correção ENEM (Redação) — quando aplicável */}
+                 {viewingSubmission.ai_feedback?.enem && (
+                   <div className="bg-gradient-fire p-1 rounded-[32px] shadow-glow-orange">
+                     <div className="bg-white dark:bg-slate-900 p-8 rounded-[28px]">
+                       <div className="flex items-center justify-between mb-5">
+                         <div className="flex items-center gap-2">
+                           <Award className="text-vibe-orange" size={20}/>
+                           <h4 className="text-sm font-black text-slate-800 dark:text-white tracking-tight">📋 Correção ENEM (IA)</h4>
+                         </div>
+                         <div className="flex items-baseline gap-2">
+                           <span className="text-3xl font-black text-vibe-orange">{viewingSubmission.ai_feedback.enem.totalScore}</span>
+                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">/ 1000</span>
+                         </div>
+                       </div>
+
+                       {/* 5 competências */}
+                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-5">
+                         {(['c1','c2','c3','c4','c5'] as const).map((k, i) => {
+                           const c = viewingSubmission.ai_feedback.enem[k];
+                           const pct = (c.score / 200) * 100;
+                           const labels = ['Norma culta','Tema','Argumentação','Coesão','Intervenção'];
+                           return (
+                             <div key={k} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-3 border border-slate-100 dark:border-slate-800">
+                               <div className="flex items-center justify-between mb-1">
+                                 <span className="text-[9px] font-black text-vibe-orange uppercase tracking-widest">C{i+1}</span>
+                                 <span className="text-sm font-black text-slate-800 dark:text-slate-100">{c.score}<span className="text-[9px] text-slate-400">/200</span></span>
+                               </div>
+                               <p className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">{labels[i]}</p>
+                               <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-2">
+                                 <div className="h-full bg-gradient-fire" style={{ width: `${pct}%` }}></div>
+                               </div>
+                               <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{c.feedback}</p>
+                             </div>
+                           );
+                         })}
+                       </div>
+
+                       {viewingSubmission.ai_feedback.enem.generalComment && (
+                         <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl p-4 mb-3">
+                           <p className="text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">Comentário Geral</p>
+                           <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{viewingSubmission.ai_feedback.enem.generalComment}</p>
+                         </div>
+                       )}
+
+                       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                         {viewingSubmission.ai_feedback.enem.strengths?.length > 0 && (
+                           <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl p-3">
+                             <p className="text-[9px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-widest mb-1">✨ Pontos Fortes</p>
+                             <ul className="space-y-1">{viewingSubmission.ai_feedback.enem.strengths.map((s: string, i: number) => <li key={i} className="text-[10px] text-slate-700 dark:text-slate-300">• {s}</li>)}</ul>
+                           </div>
+                         )}
+                         {viewingSubmission.ai_feedback.enem.weaknesses?.length > 0 && (
+                           <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-xl p-3">
+                             <p className="text-[9px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest mb-1">⚠️ A Melhorar</p>
+                             <ul className="space-y-1">{viewingSubmission.ai_feedback.enem.weaknesses.map((s: string, i: number) => <li key={i} className="text-[10px] text-slate-700 dark:text-slate-300">• {s}</li>)}</ul>
+                           </div>
+                         )}
+                         {viewingSubmission.ai_feedback.enem.improvementTips?.length > 0 && (
+                           <div className="bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/30 rounded-xl p-3">
+                             <p className="text-[9px] font-black text-purple-700 dark:text-purple-300 uppercase tracking-widest mb-1">💡 Dicas</p>
+                             <ul className="space-y-1">{viewingSubmission.ai_feedback.enem.improvementTips.map((s: string, i: number) => <li key={i} className="text-[10px] text-slate-700 dark:text-slate-300">• {s}</li>)}</ul>
+                           </div>
+                         )}
+                       </div>
+
+                       {(viewingSubmission.content?.[0]?.tab_switches > 0 || viewingSubmission.content?.[0]?.paste_attempts > 0) && (
+                         <div className="mt-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40 rounded-xl p-3">
+                           <p className="text-[10px] text-amber-700 dark:text-amber-300 font-bold leading-relaxed flex items-center gap-2">
+                             🛡️ <strong>Sinais de integridade:</strong> aluno saiu da tela {viewingSubmission.content[0].tab_switches || 0}× e tentou colar texto externo {viewingSubmission.content[0].paste_attempts || 0}× durante a escrita.
+                           </p>
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                 )}
+
+                 {/* Feedback da IA (questões objetivas/discursivas — não-redação) */}
+                 {viewingSubmission.ai_feedback && !viewingSubmission.ai_feedback?.enem && (
                    <div className="bg-indigo-50 dark:bg-indigo-900/10 p-8 rounded-[32px] border border-indigo-100 dark:border-indigo-800/30">
                       <div className="flex items-center gap-2 mb-4">
                          <Sparkles className="text-indigo-600 dark:text-indigo-400" size={18}/>
                          <h4 className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Análise Automática da IA</h4>
                       </div>
                       <p className="text-slate-700 dark:text-slate-300 italic text-sm mb-4 leading-relaxed">"{viewingSubmission.ai_feedback.generalComment}"</p>
-                      
+
                       {viewingSubmission.ai_feedback.corrections?.length > 0 && (
                         <div className="space-y-3 mt-6">
                            <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Detalhamento da IA:</h5>

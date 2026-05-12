@@ -121,7 +121,12 @@ export const MyActivities: React.FC = () => {
                 <div className="bg-white dark:bg-slate-900 rounded-[28px] overflow-hidden">
                   <div className="p-6 border-b dark:border-slate-800 flex justify-between items-start gap-4 bg-slate-50/40 dark:bg-slate-800/20">
                     <div className="flex-1 min-w-0">
-                      {isExam && <span className="inline-block bg-gradient-fire text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest mb-2">🎯 Simulado</span>}
+                      {(() => {
+                        const isEssayItem = sub.ai_feedback?.type === 'essay_enem' || String(sub.lesson_title || '').startsWith('Redação:');
+                        if (isEssayItem) return <span className="inline-block bg-gradient-fire text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest mb-2">✍️ Redação ENEM</span>;
+                        if (isExam) return <span className="inline-block bg-gradient-fire text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest mb-2">🎯 Simulado</span>;
+                        return null;
+                      })()}
                       <h3 className="font-black text-slate-800 dark:text-slate-100 text-lg leading-tight">{sub.lesson_title}</h3>
                       <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-black tracking-widest mt-2">Enviado em {sub.submitted_at ? new Date(sub.submitted_at).toLocaleString('pt-BR') : (sub.submission_date ? new Date(sub.submission_date).toLocaleString('pt-BR') : '—')}</p>
                     </div>
@@ -144,6 +149,50 @@ export const MyActivities: React.FC = () => {
                             </div>
                             <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed italic font-medium">"{sub.teacher_feedback}"</p>
                           </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Correção ENEM por competência (quando aplicável) */}
+                    {sub.ai_feedback?.enem && (
+                      <div className="bg-gradient-fire p-1 rounded-2xl shadow-glow-orange">
+                        <div className="bg-white dark:bg-slate-900 p-5 rounded-[14px]">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-black text-slate-700 dark:text-slate-200 text-xs uppercase tracking-widest">📋 Correção ENEM por Competência</h4>
+                            <span className="text-sm font-black text-vibe-orange">{sub.ai_feedback.enem.totalScore}<span className="text-[10px] text-slate-400">/1000</span></span>
+                          </div>
+                          <div className="grid grid-cols-5 gap-1.5">
+                            {(['c1','c2','c3','c4','c5'] as const).map((k, i) => {
+                              const c = sub.ai_feedback.enem[k];
+                              const pct = (c.score / 200) * 100;
+                              return (
+                                <div key={k} className="text-center bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg">
+                                  <p className="text-[9px] font-black text-vibe-orange uppercase">C{i+1}</p>
+                                  <p className="text-sm font-black text-slate-800 dark:text-slate-100">{c.score}</p>
+                                  <div className="h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mt-1">
+                                    <div className="h-full bg-gradient-fire" style={{ width: `${pct}%` }}></div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <details className="text-sm group mt-3">
+                            <summary className="cursor-pointer font-black text-vibe-purple uppercase text-[10px] tracking-[0.25em] hover:underline list-none">
+                              📋 Ver detalhes de cada competência
+                            </summary>
+                            <div className="mt-3 space-y-2">
+                              {(['c1','c2','c3','c4','c5'] as const).map((k, i) => {
+                                const c = sub.ai_feedback.enem[k];
+                                const labels = ['Norma culta','Tema','Argumentação','Coesão','Intervenção'];
+                                return (
+                                  <div key={k} className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-2 border border-slate-100 dark:border-slate-700">
+                                    <p className="text-[10px] font-black text-vibe-orange uppercase tracking-widest">C{i+1} · {labels[i]} · {c.score}/200</p>
+                                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed mt-1">{c.feedback}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </details>
                         </div>
                       </div>
                     )}

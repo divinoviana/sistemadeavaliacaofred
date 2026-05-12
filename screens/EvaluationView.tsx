@@ -23,6 +23,10 @@ export const EvaluationView: React.FC = () => {
   // Segurança das redações: contar saídas de aba/janela
   const [tabSwitches, setTabSwitches] = useState(0);
   const [pasteAttempts, setPasteAttempts] = useState(0);
+  // Resultado da correção IA da redação (5 competências ENEM)
+  const [essayCorrection, setEssayCorrection] = useState<any | null>(null);
+  // Loading específico para mostrar "Corrigindo redação…" durante a chamada IA
+  const [isCorrectingEssay, setIsCorrectingEssay] = useState(false);
   const isEssay = exam?.type === 'essay' || (exam?.questions?.[0]?.type === 'essay');
 
   useEffect(() => {
@@ -110,7 +114,8 @@ export const EvaluationView: React.FC = () => {
     setAnswers(prev => ({ ...prev, [questionId]: option }));
   };
 
-  // Submissão específica de Redação (texto livre, sem correção automática)
+  // Submissão de Redação: chama a IA pra corrigir no padrão ENEM
+  // (5 competências × 200 = 1000 pts → escala 0-10) e grava tudo no banco.
   const handleSubmitEssay = async () => {
     const essayText = String(answers[1] || '').trim();
     if (essayText.length < 200) {
@@ -122,8 +127,31 @@ export const EvaluationView: React.FC = () => {
     try {
       const nowIso = new Date().toISOString();
       const title = exam.title || 'Redação';
+      const instructions = exam.questions?.[0]?.instructions || '';
       const wordCount = essayText.split(/\s+/).filter(Boolean).length;
       const charCount = essayText.length;
+
+      // 1) Chama a IA pra corrigir no padrão ENEM
+      let enemEval: any = null;
+      setIsCorrectingEssay(true);
+      try {
+        const { evaluateEssay } = await import('../services/aiService');
+        enemEval = await evaluateEssay(title, essayText, instructions);
+      } catch (e) {
+        console.warn('Falha na correção IA da redação; gravando sem correção:', e);
+      } finally {
+        setIsCorrectingEssay(false);
+      }
+
+      const finalScore = enemEval?.score0to10 || 0;
+      setScore(finalScore);
+      setEssayCorrection(enemEval || null);
+
+      const generalComment = enemEval
+        ? `${enemEval.generalComment} (Total: ${enemEval.totalScore}/1000)` +
+          ` · Aluno saiu da tela ${tabSwitches}× e tentou colar ${pasteAttempts}×.`
+        : `Redação enviada. ${wordCount} palavras, ${charCount} caracteres. ` +
+          `Aluno saiu da tela ${tabSwitches}× e tentou colar texto externo ${pasteAttempts}×.`;
 
       const { error } = await supabase.from('submissions').insert({
         student_id: student.id,
@@ -133,7 +161,7 @@ export const EvaluationView: React.FC = () => {
         lesson_id: examId,
         lesson_title: `Redação: ${title}`,
         subject: exam.subject,
-        score: 0, // Professor avalia depois
+        score: finalScore,
         content: [{
           question: title,
           answer: essayText,
@@ -143,13 +171,15 @@ export const EvaluationView: React.FC = () => {
           char_count: charCount,
         }],
         ai_feedback: {
-          generalComment: `Redação enviada. ${wordCount} palavras, ${charCount} caracteres. Aluno saiu da tela ${tabSwitches} ${tabSwitches === 1 ? 'vez' : 'vezes'} e tentou colar texto externo ${pasteAttempts} ${pasteAttempts === 1 ? 'vez' : 'vezes'}.`,
+          type: 'essay_enem',
+          generalComment,
           corrections: [],
+          enem: enemEval || null,
         },
         teacher_feedback: null,
         submitted_at: nowIso,
         submission_date: nowIso,
-        status: 'pending',
+        status: enemEval ? 'graded' : 'pending',
       });
       if (error) throw error;
       setIsFinished(true);
@@ -427,7 +457,7 @@ export const EvaluationView: React.FC = () => {
               className="w-full bg-gradient-fire text-white py-6 rounded-[32px] font-black uppercase tracking-[0.25em] text-sm shadow-glow-orange hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? <Loader2 className="animate-spin"/> : <Send size={20}/>}
-              ✍️ Enviar Redação ao Professor
+              {isCorrectingEssay ? '🤖 IA corrigindo…' : isSubmitting ? 'Enviando…' : '✍️ Enviar Redação para Correção'}
             </button>
           </div>
         ) : !isFinished ? (
@@ -531,14 +561,18 @@ export const EvaluationView: React.FC = () => {
                 <span className={alreadyDone ? 'text-gradient-aurora' : 'text-gradient-sunset'}>
                   {alreadyDone
                     ? (isEssay ? '🔒 Redação já Enviada' : '🔒 Prova já Realizada')
-                    : (isEssay ? '✍️ Redação Enviada!' : '🎉 Mandou bem!')}
+                    : (isEssay
+                        ? (essayCorrection ? '🎯 Sua Nota ENEM' : '✍️ Redação Enviada!')
+                        : '🎉 Mandou bem!')}
                 </span>
               </h2>
               <p className="text-slate-500 dark:text-slate-400 font-bold text-sm tracking-wide mb-2 max-w-md mx-auto">
                 {alreadyDone
                   ? 'Você já usou sua única chance.'
                   : isEssay
-                    ? 'Sua redação foi enviada. O professor vai avaliar em breve.'
+                    ? (essayCorrection
+                        ? 'A IA corrigiu pelas 5 competências do ENEM. O professor revisa e dá a nota final.'
+                        : 'Sua redação foi enviada. O professor vai avaliar em breve.')
                     : 'Sua resposta foi enviada e a IA já corrigiu!'}
               </p>
               {!alreadyDone && !isEssay && score > 0 && (
@@ -548,8 +582,110 @@ export const EvaluationView: React.FC = () => {
                   <span className="text-[10px] font-black uppercase tracking-widest opacity-90">/ 10</span>
                 </div>
               )}
+
+              {/* === Correção ENEM da Redação === */}
+              {!alreadyDone && isEssay && essayCorrection && (
+                <div className="mt-6 mb-2 text-left">
+                  {/* Nota final destacada */}
+                  <div className="flex flex-col items-center mb-6">
+                    <div className="inline-flex items-center gap-3 bg-gradient-fire text-white px-8 py-4 rounded-full shadow-glow-orange animate-pulse-glow">
+                      <Award size={26}/>
+                      <span className="text-4xl font-black tracking-tighter">{essayCorrection.totalScore}</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-90">/ 1000</span>
+                    </div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mt-3">
+                      Nota equivalente · <span className="text-vibe-orange">{essayCorrection.score0to10.toFixed(1)} / 10</span>
+                    </p>
+                  </div>
+
+                  {/* 5 competências */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-6">
+                    {(['c1','c2','c3','c4','c5'] as const).map((k, i) => {
+                      const c = essayCorrection[k];
+                      const pct = (c.score / 200) * 100;
+                      const labels = ['Norma culta','Tema','Argumentação','Coesão','Intervenção'];
+                      return (
+                        <div key={k} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-3 border border-slate-100 dark:border-slate-800">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[9px] font-black text-vibe-orange uppercase tracking-widest">C{i+1}</span>
+                            <span className="text-sm font-black text-slate-800 dark:text-slate-100">{c.score}<span className="text-[9px] text-slate-400">/200</span></span>
+                          </div>
+                          <p className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">{labels[i]}</p>
+                          <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-fire" style={{ width: `${pct}%` }}></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Comentário geral */}
+                  {essayCorrection.generalComment && (
+                    <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl p-4 mb-4">
+                      <p className="text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">🤖 Comentário Geral</p>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{essayCorrection.generalComment}</p>
+                    </div>
+                  )}
+
+                  {/* Feedback por competência (expansível) */}
+                  <details className="text-sm group mb-4">
+                    <summary className="cursor-pointer font-black text-vibe-purple uppercase text-[10px] tracking-[0.25em] hover:underline list-none">
+                      📋 Ver comentário detalhado das 5 competências
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      {(['c1','c2','c3','c4','c5'] as const).map((k, i) => {
+                        const c = essayCorrection[k];
+                        const labels = ['Domínio da Norma Culta','Compreensão do Tema','Argumentação','Coesão e Coerência','Proposta de Intervenção'];
+                        return (
+                          <div key={k} className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-100 dark:border-slate-700">
+                            <p className="text-[10px] font-black text-vibe-orange uppercase tracking-widest">C{i+1} · {labels[i]} · {c.score}/200</p>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mt-1">{c.feedback}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+
+                  {/* Pontos fortes / fracos / dicas */}
+                  {(essayCorrection.strengths?.length || essayCorrection.weaknesses?.length || essayCorrection.improvementTips?.length) && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                      {essayCorrection.strengths?.length > 0 && (
+                        <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl p-3">
+                          <p className="text-[9px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-widest mb-2">✨ Pontos Fortes</p>
+                          <ul className="space-y-1.5">
+                            {essayCorrection.strengths.map((s: string, idx: number) => (
+                              <li key={idx} className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">• {s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {essayCorrection.weaknesses?.length > 0 && (
+                        <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-xl p-3">
+                          <p className="text-[9px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest mb-2">⚠️ Pontos a Melhorar</p>
+                          <ul className="space-y-1.5">
+                            {essayCorrection.weaknesses.map((s: string, idx: number) => (
+                              <li key={idx} className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">• {s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {essayCorrection.improvementTips?.length > 0 && (
+                        <div className="bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/30 rounded-xl p-3">
+                          <p className="text-[9px] font-black text-purple-700 dark:text-purple-300 uppercase tracking-widest mb-2">💡 Dicas Práticas</p>
+                          <ul className="space-y-1.5">
+                            {essayCorrection.improvementTips.map((s: string, idx: number) => (
+                              <li key={idx} className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">• {s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {!alreadyDone && isEssay && tabSwitches > 0 && (
-                <div className="inline-flex items-center gap-2 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-5 py-2.5 rounded-full mt-4 mb-2 text-xs font-black uppercase tracking-widest">
+                <div className="inline-flex items-center gap-2 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-5 py-2.5 rounded-full mt-2 mb-4 text-xs font-black uppercase tracking-widest">
                   <AlertTriangle size={14}/> Você saiu da tela {tabSwitches} {tabSwitches === 1 ? 'vez' : 'vezes'}
                 </div>
               )}
