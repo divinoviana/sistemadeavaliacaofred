@@ -1512,116 +1512,156 @@ export const AdminDashboard: React.FC = () => {
 
           {/* Conteúdo das Abas */}
           {activeTab === 'lessons_list' && (
-            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               {curriculumData
-                 .filter(gradeData => filterGrade === 'all' || String(gradeData.id) === filterGrade)
-                 .map((gradeData, gIdx) => (
-                 <section key={gIdx} className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-8 shadow-sm">
-                   <div className="flex items-center justify-between mb-8">
-                     <div className="flex items-center gap-4">
-                       <div className="w-12 h-12 bg-tocantins-blue rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg ring-4 ring-blue-50 dark:ring-blue-900/10">
-                         {gradeData.id}º
-                       </div>
-                       <div>
-                         <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Grade de Ciências Humanas</h3>
-                         <p className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest leading-none mt-1">Nível de Ensino: {gradeData.id}ª Série</p>
-                       </div>
-                     </div>
-                   </div>
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {curriculumData
+                .filter(gradeData => filterGrade === 'all' || String(gradeData.id) === filterGrade)
+                .map((gradeData, gIdx) => {
+                  // Pra cada série, conta totais (aulas, com teoria, com atividade) — só na matéria do prof
+                  const allowedSubjects: Subject[] = (isSuper
+                    ? (['historia','geografia','sociologia','filosofia'] as Subject[])
+                    : (teacherSubject ? [teacherSubject as Subject] : []));
+                  const totalLessonsGrade = gradeData.bimesters.flatMap(b =>
+                    b.lessons.filter(l => allowedSubjects.includes(l.subject as Subject))
+                  );
+                  const publishedTheoryGrade = totalLessonsGrade.filter(l => lessonOverrides?.[l.id]).length;
+                  const publishedActivityGrade = totalLessonsGrade.filter(l => savedActivities.includes(l.id)).length;
 
-                   <div className="grid grid-cols-1 gap-4">
-                     {(['historia', 'geografia', 'sociologia', 'filosofia'] as Subject[])
-                       .filter(subjId => isSuper || subjId === teacherSubject)
-                       .map((subjId) => {
-                       const lessons = gradeData.bimesters.flatMap(b => b.lessons.filter(l => l.subject === subjId).map(l => ({...l, bimesterId: b.id})));
-                       if (lessons.length === 0) return null;
-                       return (
-                         <div key={subjId} className="space-y-4">
-                           <div className="flex items-center gap-2 mb-2">
-                             <div className={`w-2 h-2 rounded-full ${subjectsInfo[subjId]?.color || 'bg-slate-400'}`}></div>
-                             <h4 className="font-bold text-slate-800 dark:text-slate-200 uppercase text-xs tracking-widest">
-                               {subjectsInfo[subjId]?.name || subjId}
-                             </h4>
-                           </div>
-
-                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                              {lessons.map((lesson, lIdx) => (
-                                <div 
-                                  key={lIdx}
-                                  className="group bg-slate-50 dark:bg-slate-800/50 rounded-3xl p-6 border border-slate-100 dark:border-slate-800 hover:border-tocantins-blue/30 transition-all"
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">
-                                        {lesson.bimesterId}º Bimestre • {lesson.id}
-                                      </div>
-                                    <h5 className="font-bold text-slate-800 dark:text-slate-100 mb-4 group-hover:text-tocantins-blue dark:group-hover:text-tocantins-yellow transition-colors leading-tight">
-                                      {lessonOverrides?.[lesson.id]?.title || lesson.title}
-                                    </h5>
-                                  </div>
-                                  <div className="flex gap-2">
-                                     {lessonOverrides?.[lesson.id] && (
-                                       <button 
-                                         onClick={() => handleDeleteLessonOverride(lesson.id)}
-                                         className="p-3 bg-red-50 dark:bg-red-900/10 text-red-400 hover:text-red-600 rounded-xl shadow-sm border border-red-100 dark:border-red-900/30 transition-all cursor-pointer"
-                                         title="Remover Conteúdo Postado"
-                                       >
-                                         <Trash2 size={18}/>
-                                       </button>
-                                     )}
-                                     <button 
-                                       onClick={() => handleOpenLessonEditor(lesson)}
-                                       className={`p-3 rounded-xl shadow-sm border transition-all cursor-pointer ${
-                                         lessonOverrides?.[lesson.id] 
-                                           ? 'bg-tocantins-blue text-white border-tocantins-blue shadow-lg shadow-blue-500/20' 
-                                           : 'bg-white dark:bg-slate-800 text-slate-400 hover:text-tocantins-blue dark:hover:text-tocantins-yellow dark:border-slate-700'
-                                       }`}
-                                     >
-                                       <Presentation size={18}/>
-                                     </button>
-                                     <button 
-                                       onClick={() => handleOpenActivityEditor(lesson)}
-                                       className={`p-3 rounded-xl shadow-sm border transition-all cursor-pointer ${
-                                         savedActivities.includes(lesson.id)
-                                           ? 'bg-emerald-500 text-white border-emerald-500'
-                                           : 'bg-white dark:bg-slate-800 text-slate-400 hover:text-tocantins-blue dark:hover:text-tocantins-yellow dark:border-slate-700'
-                                       }`}
-                                     >
-                                       {savedActivities.includes(lesson.id) ? <CheckCircle2 size={18}/> : <ClipboardList size={18}/>}
-                                     </button>
-                                  </div>
-                                </div>
-                                
-                                {savedActivities.includes(lesson.id) && (
-                                  <div className="mt-4 pt-4 border-t border-dashed dark:border-slate-700 flex items-center justify-between">
-                                     <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1">
-                                       <Save size={12}/> Atividade no Banco
-                                     </span>
-                                     <div className="flex gap-2">
-                                        <button 
-                                          onClick={() => handleDownloadActivity(lesson)}
-                                          className="text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 uppercase tracking-widest transition-all cursor-pointer"
-                                        >
-                                          Exportar
-                                        </button>
-                                        <button 
-                                          onClick={() => handleDeleteActivity(lesson.id)}
-                                          className="text-[10px] font-bold text-red-500 hover:text-red-700 uppercase tracking-widest transition-all cursor-pointer"
-                                        >
-                                          Limpar
-                                        </button>
-                                     </div>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                  return (
+                    <details key={gIdx} className="bg-white dark:bg-slate-900 rounded-[32px] border dark:border-slate-800 shadow-sm overflow-hidden group/grade" open={filterGrade !== 'all'}>
+                      <summary className="cursor-pointer p-5 sm:p-6 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors list-none flex items-center gap-4">
+                        <div className="w-14 h-14 bg-gradient-cosmic rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-glow-purple ring-4 ring-purple-50 dark:ring-purple-900/10 shrink-0">
+                          {gradeData.id}º
                         </div>
-                      );
-                    })}
-                   </div>
-                 </section>
-               ))}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg sm:text-xl font-black text-slate-800 dark:text-white tracking-tight font-display">
+                            {gradeData.id}ª Série · {gradeData.title}
+                          </h3>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                            {totalLessonsGrade.length} aulas · {publishedTheoryGrade} com teoria · {publishedActivityGrade} com atividade
+                          </p>
+                        </div>
+                        <ChevronRight size={22} className="text-slate-300 dark:text-slate-700 group-open/grade:rotate-90 transition-transform shrink-0"/>
+                      </summary>
+
+                      <div className="border-t dark:border-slate-800 p-4 sm:p-6 space-y-3 bg-slate-50/40 dark:bg-slate-800/20">
+                        {gradeData.bimesters.map((bimester, bIdx) => {
+                          const bimesterLessons = bimester.lessons.filter(l => allowedSubjects.includes(l.subject as Subject));
+                          if (bimesterLessons.length === 0) return null;
+                          const bimPublishedTheory = bimesterLessons.filter(l => lessonOverrides?.[l.id]).length;
+                          const bimPublishedAct = bimesterLessons.filter(l => savedActivities.includes(l.id)).length;
+
+                          return (
+                            <details key={bIdx} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden group/bim">
+                              <summary className="cursor-pointer p-4 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors list-none flex items-center gap-3">
+                                <div className="w-10 h-10 bg-gradient-fire rounded-xl flex items-center justify-center text-white font-black text-sm shadow-md shrink-0">
+                                  B{bimester.id}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="text-sm font-black text-slate-800 dark:text-slate-100 tracking-tight">
+                                    {bimester.id}º Bimestre
+                                  </h4>
+                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                                    {bimesterLessons.length} aulas · {bimPublishedTheory} com teoria · {bimPublishedAct} com atividade
+                                  </p>
+                                </div>
+                                <ChevronRight size={18} className="text-slate-300 dark:text-slate-700 group-open/bim:rotate-90 transition-transform shrink-0"/>
+                              </summary>
+
+                              <div className="border-t dark:border-slate-800 p-3 space-y-3 bg-slate-50/30 dark:bg-slate-800/10">
+                                {allowedSubjects.map((subjId) => {
+                                  const lessonsOfSubj = bimesterLessons.filter(l => l.subject === subjId);
+                                  if (lessonsOfSubj.length === 0) return null;
+                                  return (
+                                    <div key={subjId} className="space-y-2">
+                                      <div className="flex items-center gap-2 px-1">
+                                        <span className={`inline-flex items-center justify-center text-base ${subjectsInfo[subjId]?.color || 'bg-slate-400'} w-7 h-7 rounded-lg text-white shadow-sm`}>
+                                          {subjectsInfo[subjId]?.icon}
+                                        </span>
+                                        <h5 className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-widest">
+                                          {subjectsInfo[subjId]?.name}
+                                        </h5>
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">· {lessonsOfSubj.length} aulas</span>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                                        {lessonsOfSubj.map((lesson) => {
+                                          const hasTheory = !!lessonOverrides?.[lesson.id];
+                                          const hasActivity = savedActivities.includes(lesson.id);
+                                          return (
+                                            <div
+                                              key={lesson.id}
+                                              className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 hover:border-vibe-purple/30 transition-all group"
+                                            >
+                                              <div className="flex items-start justify-between gap-3">
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{lesson.id}</p>
+                                                  <h6 className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-snug group-hover:text-vibe-purple transition-colors line-clamp-2">
+                                                    {lessonOverrides?.[lesson.id]?.title || lesson.title}
+                                                  </h6>
+                                                </div>
+                                                <div className="flex flex-col gap-1.5 shrink-0">
+                                                  {hasTheory && (
+                                                    <button
+                                                      onClick={() => handleDeleteLessonOverride(lesson.id)}
+                                                      className="p-2 bg-red-50 dark:bg-red-900/10 text-red-400 hover:text-red-600 rounded-lg border border-red-100 dark:border-red-900/30 transition-all"
+                                                      title="Remover teoria postada"
+                                                    >
+                                                      <Trash2 size={14}/>
+                                                    </button>
+                                                  )}
+                                                  <button
+                                                    onClick={() => handleOpenLessonEditor(lesson)}
+                                                    className={`p-2 rounded-lg border transition-all ${hasTheory ? 'bg-tocantins-blue text-white border-tocantins-blue shadow-md' : 'bg-white dark:bg-slate-800 text-slate-400 hover:text-tocantins-blue border-slate-200 dark:border-slate-700'}`}
+                                                    title={hasTheory ? 'Editar teoria' : 'Adicionar teoria'}
+                                                  >
+                                                    <Presentation size={14}/>
+                                                  </button>
+                                                  <button
+                                                    onClick={() => handleOpenActivityEditor(lesson)}
+                                                    className={`p-2 rounded-lg border transition-all ${hasActivity ? 'bg-emerald-500 text-white border-emerald-500 shadow-md' : 'bg-white dark:bg-slate-800 text-slate-400 hover:text-vibe-purple border-slate-200 dark:border-slate-700'}`}
+                                                    title={hasActivity ? 'Editar atividade' : 'Criar atividade'}
+                                                  >
+                                                    {hasActivity ? <CheckCircle2 size={14}/> : <ClipboardList size={14}/>}
+                                                  </button>
+                                                </div>
+                                              </div>
+
+                                              {hasActivity && (
+                                                <div className="mt-3 pt-3 border-t border-dashed dark:border-slate-700 flex items-center justify-between">
+                                                  <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1">
+                                                    <Save size={10}/> Publicada
+                                                  </span>
+                                                  <div className="flex gap-2">
+                                                    <button
+                                                      onClick={() => handleDownloadActivity(lesson)}
+                                                      className="text-[9px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 uppercase tracking-widest transition-all"
+                                                    >
+                                                      Exportar
+                                                    </button>
+                                                    <button
+                                                      onClick={() => handleDeleteActivity(lesson.id)}
+                                                      className="text-[9px] font-bold text-red-500 hover:text-red-700 uppercase tracking-widest transition-all"
+                                                    >
+                                                      Limpar
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </details>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  );
+                })}
             </div>
           )}
 
