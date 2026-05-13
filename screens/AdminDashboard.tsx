@@ -13,7 +13,7 @@ import {
   Clock, Send, BrainCircuit, Sparkles, FileText, CheckCircle2,
   Filter, Download, GraduationCap, ChevronRight, ClipboardEdit, 
   BarChart3, Printer, Wand2, Library, ListChecks, Database,
-  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw
+  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target
 } from 'lucide-react';
 
 // =====================================================================
@@ -242,7 +242,7 @@ export const AdminDashboard: React.FC = () => {
   const isSuper = student?.email === 'admin@admin.com' || student?.email === 'divinoviana@gmail.com';
 
   // Estados principais
-  const [activeTab, setActiveTab] = useState<'question_bank' | 'submissions' | 'students' | 'messages' | 'lessons_list' | 'exam_generator' | 'essays' | 'reports' | 'evaluations'>('lessons_list');
+  const [activeTab, setActiveTab] = useState<'question_bank' | 'submissions' | 'students' | 'messages' | 'lessons_list' | 'exam_generator' | 'essays' | 'attendance' | 'reports' | 'evaluations'>('lessons_list');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClass, setFilterClass] = useState('all');
@@ -306,6 +306,15 @@ export const AdminDashboard: React.FC = () => {
   const [isPublishingExam, setIsPublishingExam] = useState(false);
   const [publishedExams, setPublishedExams] = useState<any[]>([]);
 
+  // ── Frequência (Geolocalização) ────────────────
+  const [schoolLocation, setSchoolLocation] = useState<any | null>(null);
+  const [editingSchoolLoc, setEditingSchoolLoc] = useState({ name: 'Escola', address: '', latitude: '', longitude: '', radius_meters: '150' });
+  const [isSavingSchoolLoc, setIsSavingSchoolLoc] = useState(false);
+  const [isCapturingLoc, setIsCapturingLoc] = useState(false);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceFilterDate, setAttendanceFilterDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+
   // Alvos de envio: substituem essayClass / examClass quando precisar de multi.
   const [examTarget, setExamTarget] = useState<TargetClassValue>({ mode: 'all', classes: [] });
   const [essayTarget, setEssayTarget] = useState<TargetClassValue>({ mode: 'all', classes: [] });
@@ -365,8 +374,14 @@ export const AdminDashboard: React.FC = () => {
       fetchSubmissions();
       fetchChatSessions();
       fetchPublishedExams();
+      fetchSchoolLocation();
     }
   }, [teacherSubject, isSuper, isAuthLoading]);
+
+  // Carrega presenças ao abrir a aba e quando muda a data
+  useEffect(() => {
+    if (activeTab === 'attendance') fetchAttendanceRecords();
+  }, [activeTab, attendanceFilterDate]);
 
   useEffect(() => {
     if (!selectedChatStudentId) return;
@@ -920,6 +935,108 @@ export const AdminDashboard: React.FC = () => {
       setPublishedEssays(all.filter((e: any) => e.type === 'essay'));
     } catch (e) {
       console.error('Erro ao buscar simulados/redações:', e);
+    }
+  };
+
+  // ============================================================
+  // FREQUÊNCIA POR GEOLOCALIZAÇÃO
+  // ============================================================
+  const fetchSchoolLocation = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('school_locations')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      if (data) {
+        setSchoolLocation(data);
+        setEditingSchoolLoc({
+          name: data.name || 'Escola',
+          address: data.address || '',
+          latitude: String(data.latitude),
+          longitude: String(data.longitude),
+          radius_meters: String(data.radius_meters || 150),
+        });
+      }
+    } catch (e) {
+      console.warn('Falha ao buscar school_locations:', e);
+    }
+  };
+
+  const fetchAttendanceRecords = async (dateISO?: string) => {
+    setAttendanceLoading(true);
+    try {
+      const ds = dateISO || attendanceFilterDate;
+      const dayStart = new Date(`${ds}T00:00:00`).toISOString();
+      const dayEnd = new Date(`${ds}T23:59:59.999`).toISOString();
+      const { data, error } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .gte('created_at', dayStart)
+        .lte('created_at', dayEnd)
+        .order('created_at', { ascending: false })
+        .limit(2000);
+      if (error) throw error;
+      setAttendanceRecords(data || []);
+    } catch (e) {
+      console.error('Erro ao buscar frequência:', e);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
+  const handleCaptureCurrentLocation = async () => {
+    setIsCapturingLoc(true);
+    try {
+      const { getCurrentPosition } = await import('../lib/geo');
+      const pos = await getCurrentPosition({ highAccuracy: true, timeoutMs: 15000 });
+      setEditingSchoolLoc(prev => ({
+        ...prev,
+        latitude: pos.latitude.toFixed(7),
+        longitude: pos.longitude.toFixed(7),
+      }));
+      alert(`Localização capturada com precisão de ~${Math.round(pos.accuracy_meters)} m. Confirme o raio e salve.`);
+    } catch (e: any) {
+      alert('Não foi possível capturar: ' + (e?.message || ''));
+    } finally {
+      setIsCapturingLoc(false);
+    }
+  };
+
+  const handleSaveSchoolLocation = async () => {
+    const lat = parseFloat(editingSchoolLoc.latitude);
+    const lng = parseFloat(editingSchoolLoc.longitude);
+    const radius = parseInt(editingSchoolLoc.radius_meters || '150', 10);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) { alert('Coordenadas inválidas.'); return; }
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) { alert('Latitude/longitude fora do intervalo válido.'); return; }
+    if (!Number.isFinite(radius) || radius < 20 || radius > 5000) { alert('Raio deve estar entre 20 e 5000 metros.'); return; }
+
+    setIsSavingSchoolLoc(true);
+    try {
+      const payload: any = {
+        name: editingSchoolLoc.name.trim() || 'Escola',
+        address: editingSchoolLoc.address.trim() || null,
+        latitude: lat,
+        longitude: lng,
+        radius_meters: radius,
+        updated_at: new Date().toISOString(),
+      };
+      if (schoolLocation?.id) {
+        const { error } = await supabase.from('school_locations').update(payload).eq('id', schoolLocation.id);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.from('school_locations').insert(payload).select('*').single();
+        if (error) throw error;
+        setSchoolLocation(data);
+      }
+      alert('Localização da escola salva. Os alunos já podem marcar presença.');
+      fetchSchoolLocation();
+    } catch (e: any) {
+      alert('Erro ao salvar localização: ' + (e?.message || ''));
+    } finally {
+      setIsSavingSchoolLoc(false);
     }
   };
 
@@ -1546,6 +1663,7 @@ export const AdminDashboard: React.FC = () => {
               { id: 'messages',       icon: MessageSquare,label: 'Mensagens',        grad: 'bg-gradient-mint',    glow: 'shadow-glow-lime' },
               { id: 'exam_generator', icon: BrainCircuit, label: 'Simulados',        grad: 'bg-gradient-sunset',  glow: 'shadow-glow-pink' },
               { id: 'essays',         icon: FileText,     label: 'Redação',          grad: 'bg-gradient-fire',    glow: 'shadow-glow-orange' },
+              { id: 'attendance',     icon: MapPin,       label: 'Frequência',       grad: 'bg-gradient-ocean',   glow: 'shadow-glow-cyan' },
               { id: 'reports',        icon: BarChart3,    label: 'Relatórios IA',    grad: 'bg-gradient-cosmic',  glow: 'shadow-glow-purple' },
             ].map(item => {
               const isActive = activeTab === item.id;
@@ -1591,6 +1709,7 @@ export const AdminDashboard: React.FC = () => {
                   {activeTab === 'messages' && '💬 Central de Dúvidas'}
                   {activeTab === 'exam_generator' && '🎯 Simulados'}
                   {activeTab === 'essays' && '✍️ Redação'}
+                  {activeTab === 'attendance' && '📍 Frequência por Geolocalização'}
                   {activeTab === 'reports' && '📊 Análise de Progresso'}
                 </span>
               </h2>
@@ -2767,6 +2886,220 @@ export const AdminDashboard: React.FC = () => {
               )}
             </div>
           )}
+
+          {activeTab === 'attendance' && (() => {
+            // Agrupa registros do dia por turma
+            const byClass: Record<string, any[]> = {};
+            attendanceRecords.forEach(r => {
+              const k = r.school_class || '—';
+              if (!byClass[k]) byClass[k] = [];
+              byClass[k].push(r);
+            });
+            const classKeys = Object.keys(byClass).sort();
+            const presentCount = attendanceRecords.filter(r => r.status === 'present').length;
+
+            return (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">
+                {/* === CONFIGURAÇÃO DA LOCALIZAÇÃO === */}
+                <div className="bg-gradient-ocean p-1 rounded-[36px] shadow-glow-cyan">
+                  <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-12 h-12 bg-gradient-ocean rounded-2xl flex items-center justify-center text-white shadow-glow-cyan shrink-0">
+                        <Target size={22}/>
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-xl font-black tracking-tighter font-display">
+                          <span className="text-gradient-aurora">📍 Localização da Escola</span>
+                        </h2>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mt-1">
+                          {schoolLocation
+                            ? `Configurada · raio de ${schoolLocation.radius_meters} m`
+                            : '⚠️ Ainda não configurada · alunos não conseguem marcar presença'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Nome</label>
+                        <input
+                          type="text"
+                          value={editingSchoolLoc.name}
+                          onChange={e => setEditingSchoolLoc({...editingSchoolLoc, name: e.target.value})}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-cyan-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Endereço (opcional)</label>
+                        <input
+                          type="text"
+                          value={editingSchoolLoc.address}
+                          onChange={e => setEditingSchoolLoc({...editingSchoolLoc, address: e.target.value})}
+                          placeholder="Rua, número, bairro, cidade"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-cyan-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Latitude</label>
+                        <input
+                          type="text"
+                          value={editingSchoolLoc.latitude}
+                          onChange={e => setEditingSchoolLoc({...editingSchoolLoc, latitude: e.target.value})}
+                          placeholder="-10.184"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-mono font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-cyan-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Longitude</label>
+                        <input
+                          type="text"
+                          value={editingSchoolLoc.longitude}
+                          onChange={e => setEditingSchoolLoc({...editingSchoolLoc, longitude: e.target.value})}
+                          placeholder="-48.333"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-mono font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-cyan-100"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-1 block">Raio aceito (metros) — 20 a 5000</label>
+                        <input
+                          type="number"
+                          min={20}
+                          max={5000}
+                          step={10}
+                          value={editingSchoolLoc.radius_meters}
+                          onChange={e => setEditingSchoolLoc({...editingSchoolLoc, radius_meters: e.target.value})}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-cyan-100"
+                        />
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 ml-2 italic">
+                          Sugestão: 100–200 m (escola média). Reduza pra ficar mais restrito ou aumente pra ser mais permissivo.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                      <button
+                        onClick={handleCaptureCurrentLocation}
+                        disabled={isCapturingLoc}
+                        className="flex-1 bg-gradient-aurora text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.25em] hover:scale-[1.02] hover:shadow-glow-cyan transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {isCapturingLoc ? <Loader2 className="animate-spin" size={16}/> : <Crosshair size={16}/>}
+                        📍 Usar Minha Localização Atual
+                      </button>
+                      <button
+                        onClick={handleSaveSchoolLocation}
+                        disabled={isSavingSchoolLoc || !editingSchoolLoc.latitude || !editingSchoolLoc.longitude}
+                        className="flex-1 bg-gradient-vibe text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.25em] hover:scale-[1.02] hover:shadow-glow-purple transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {isSavingSchoolLoc ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
+                        💾 Salvar Localização
+                      </button>
+                    </div>
+
+                    {schoolLocation && (
+                      <div className="mt-3 flex items-center justify-center">
+                        <a
+                          href={`https://www.google.com/maps?q=${schoolLocation.latitude},${schoolLocation.longitude}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] font-black text-vibe-cyan uppercase tracking-widest hover:underline"
+                        >
+                          🗺️ Ver no Google Maps
+                        </a>
+                      </div>
+                    )}
+
+                    <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40 rounded-2xl">
+                      <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold leading-relaxed">
+                        💡 <strong>Como configurar:</strong> vá pessoalmente até a escola (ou clique no portão), abra esta tela no celular e toque em "Usar Minha Localização Atual". O sistema captura as coordenadas com a melhor precisão do dispositivo. Depois, defina um raio (em metros) ao redor desse ponto onde será aceita a marcação de presença.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* === LISTA DE PRESENÇAS DO DIA === */}
+                <div className="bg-white dark:bg-slate-900 rounded-[36px] border dark:border-slate-800 p-6 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h3 className="font-black text-slate-800 dark:text-white text-lg tracking-tight">📋 Registros de Presença</h3>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                        {attendanceRecords.length} {attendanceRecords.length === 1 ? 'marcação' : 'marcações'} · {presentCount} presentes · {classKeys.length} turmas
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={attendanceFilterDate}
+                        onChange={e => setAttendanceFilterDate(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none"
+                      />
+                      <button
+                        onClick={() => fetchAttendanceRecords()}
+                        className="p-2.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 hover:scale-110 transition-all"
+                        title="Atualizar"
+                      >
+                        <RotateCw size={16}/>
+                      </button>
+                    </div>
+                  </div>
+
+                  {attendanceLoading ? (
+                    <div className="py-12 text-center">
+                      <Loader2 className="animate-spin mx-auto text-vibe-cyan" />
+                    </div>
+                  ) : attendanceRecords.length === 0 ? (
+                    <div className="py-12 text-center bg-slate-50 dark:bg-slate-800/30 rounded-3xl border-2 border-dashed dark:border-slate-700">
+                      <MapPin className="mx-auto text-slate-300 dark:text-slate-700 mb-3" size={36}/>
+                      <p className="font-black text-slate-700 dark:text-slate-200 tracking-tight">Nenhuma marcação hoje</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Os alunos precisam tocar em "Marcar Presença" na Home pra aparecer aqui.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {classKeys.map(cls => {
+                        const list = byClass[cls].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                        return (
+                          <details key={cls} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden group" open>
+                            <summary className="cursor-pointer p-4 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors list-none flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-gradient-ocean rounded-xl flex items-center justify-center text-white font-black text-sm shadow-md">
+                                  {cls.split('.')[0]}
+                                </div>
+                                <div>
+                                  <p className="font-black text-slate-800 dark:text-slate-100 text-sm">Turma {cls}</p>
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{list.length} presença{list.length > 1 ? 's' : ''}</p>
+                                </div>
+                              </div>
+                              <ChevronRight size={18} className="text-slate-300 dark:text-slate-700 group-open:rotate-90 transition-transform"/>
+                            </summary>
+                            <div className="border-t dark:border-slate-800 divide-y dark:divide-slate-800">
+                              {list.map((r: any) => {
+                                const time = new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                                const dist = r.distance_meters != null ? `${Math.round(r.distance_meters)} m` : '—';
+                                return (
+                                  <div key={r.id} className="p-3 flex items-center gap-3 hover:bg-white dark:hover:bg-slate-900 transition-colors">
+                                    <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm ring-2 ring-slate-100 dark:ring-slate-800 shrink-0">
+                                      <StudentAvatar studentId={r.student_id} studentName={r.student_name || '?'} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">{r.student_name || '—'}</p>
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                                        🕒 {time} · 📏 {dist} da escola
+                                      </p>
+                                    </div>
+                                    <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shrink-0 ${r.status === 'present' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
+                                      {r.status === 'present' ? '✓ Presente' : r.status}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {activeTab === 'reports' && (
              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl mx-auto">

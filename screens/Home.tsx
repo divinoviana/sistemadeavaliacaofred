@@ -3,12 +3,13 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { subjectsInfo } from '../data';
 import { TEACHER_INFO } from '../data_admin';
-import { BookOpen, GraduationCap, ChevronRight, BrainCircuit, BellRing, Loader2, Clock } from 'lucide-react';
+import { BookOpen, GraduationCap, ChevronRight, BrainCircuit, BellRing, Loader2, Clock, MapPin, CheckCircle2, Crosshair } from 'lucide-react';
 import { Subject } from '../types';
 import { curriculumData } from '../data';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { isItemTargetedAtClass } from '../data_helpers';
+import { getCurrentPosition, haversineDistance, formatDistance } from '../lib/geo';
 
 export const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -16,14 +17,95 @@ export const Home: React.FC = () => {
   const [exams, setExams] = useState<any[]>([]);
   const [finishedExamTitles, setFinishedExamTitles] = useState<string[]>([]);
   const [publishedCountBySubject, setPublishedCountBySubject] = useState<Record<string, number>>({});
+  const [attendanceToday, setAttendanceToday] = useState<any | null>(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceMsg, setAttendanceMsg] = useState<{ type: 'ok' | 'err' | 'info'; text: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !student) {
       navigate('/login');
     } else if (student) {
       fetchExamsAndHistory();
+      checkAttendanceToday();
     }
   }, [student, isLoading, navigate]);
+
+  const checkAttendanceToday = async () => {
+    if (!student) return;
+    try {
+      const start = new Date(); start.setHours(0, 0, 0, 0);
+      const { data } = await supabase
+        .from('attendance_records')
+        .select('id, status, created_at, distance_meters')
+        .eq('student_id', student.id)
+        .gte('created_at', start.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (data && data[0]) setAttendanceToday(data[0]);
+    } catch (e) {
+      // tabela pode ainda não existir — silencioso
+    }
+  };
+
+  const handleMarkAttendance = async () => {
+    if (!student || attendanceLoading) return;
+    setAttendanceLoading(true);
+    setAttendanceMsg(null);
+    try {
+      // 1. Busca config da escola
+      const { data: locs, error: locErr } = await supabase
+        .from('school_locations')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (locErr) throw locErr;
+      const loc = (locs && locs[0]) || null;
+      if (!loc) {
+        setAttendanceMsg({ type: 'err', text: 'O professor ainda não configurou a localização da escola.' });
+        return;
+      }
+
+      // 2. Pede posição
+      const pos = await getCurrentPosition({ highAccuracy: true, timeoutMs: 20000 });
+
+      // 3. Calcula distância
+      const dist = haversineDistance(pos.latitude, pos.longitude, loc.latitude, loc.longitude);
+      const radius = Number(loc.radius_meters) || 150;
+
+      if (dist > radius) {
+        setAttendanceMsg({
+          type: 'err',
+          text: `Você está a ${formatDistance(dist)} da escola (limite: ${formatDistance(radius)}). Aproxime-se e tente de novo.`,
+        });
+        return;
+      }
+
+      // 4. Insere registro
+      const payload: any = {
+        student_id: student.id,
+        student_name: student.name,
+        school_class: student.school_class,
+        grade: String(student.grade),
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        accuracy_meters: pos.accuracy_meters,
+        distance_meters: dist,
+        status: 'present',
+      };
+      const { data: inserted, error: insErr } = await supabase
+        .from('attendance_records')
+        .insert(payload)
+        .select()
+        .single();
+      if (insErr) throw insErr;
+      setAttendanceToday(inserted);
+      setAttendanceMsg({ type: 'ok', text: `✅ Presença registrada! Você estava a ${formatDistance(dist)} da escola.` });
+    } catch (e: any) {
+      setAttendanceMsg({ type: 'err', text: e?.message || 'Não foi possível registrar a presença.' });
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
 
   const fetchExamsAndHistory = async () => {
     if (!student) return;
@@ -135,6 +217,58 @@ export const Home: React.FC = () => {
       </div>
 
       <div className="container mx-auto px-4 max-w-6xl -mt-10 space-y-12 relative z-10">
+        {/* Botão de Frequência por Geolocalização */}
+        <div className="relative overflow-hidden bg-gradient-ocean p-1 rounded-[40px] shadow-glow-cyan animate-in zoom-in duration-500">
+          <div className="bg-white dark:bg-slate-900 rounded-[36px] p-7 flex flex-col md:flex-row md:items-center gap-5">
+            <div className="w-16 h-16 bg-gradient-ocean rounded-2xl flex items-center justify-center text-white shadow-glow-cyan shrink-0">
+              <MapPin size={30} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-2xl font-black tracking-tighter font-display">
+                <span className="text-gradient-aurora">📍 Frequência de hoje</span>
+              </h3>
+              {attendanceToday ? (
+                <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold mt-1 flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  Presença já registrada às {new Date(attendanceToday.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              ) : (
+                <p className="text-slate-500 dark:text-slate-400 text-xs font-bold mt-1">
+                  Clique no botão pra marcar presença. Você precisa estar dentro da escola — o app verifica sua localização.
+                </p>
+              )}
+              {attendanceMsg && (
+                <div className={`mt-3 px-4 py-2 rounded-2xl text-xs font-bold ${
+                  attendanceMsg.type === 'ok' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' :
+                  attendanceMsg.type === 'err' ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300' :
+                  'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300'
+                }`}>
+                  {attendanceMsg.text}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={handleMarkAttendance}
+              disabled={attendanceLoading || !!attendanceToday}
+              className={`shrink-0 px-7 py-4 rounded-2xl font-black text-sm uppercase tracking-wider transition-all flex items-center gap-2 ${
+                attendanceToday
+                  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 cursor-not-allowed'
+                  : attendanceLoading
+                    ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-wait'
+                    : 'bg-gradient-ocean text-white shadow-glow-cyan hover:scale-105 active:scale-95'
+              }`}
+            >
+              {attendanceLoading ? (
+                <><Loader2 size={18} className="animate-spin" /> Localizando…</>
+              ) : attendanceToday ? (
+                <><CheckCircle2 size={18} /> Presente ✓</>
+              ) : (
+                <><Crosshair size={18} /> ✋ Marcar Presença</>
+              )}
+            </button>
+          </div>
+        </div>
+
         {pendingExams.length > 0 && (
            <div className="relative overflow-hidden bg-gradient-fire p-1 rounded-[40px] shadow-glow-orange animate-in zoom-in duration-500">
             <div className="bg-white dark:bg-slate-900 rounded-[36px] p-8">
