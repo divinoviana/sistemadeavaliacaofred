@@ -6,6 +6,7 @@ import { grade3Data } from './data_grade3';
 
 export * from './data_subjects';
 export * from './data_admin';
+export * from './data_helpers';
 
 export const curriculumData: Grade[] = [
   grade1Data,

@@ -131,6 +131,110 @@ const StudentAvatar: React.FC<{ studentId?: string; studentName: string; photoUr
   );
 };
 
+// =====================================================================
+// TargetClassPicker — seletor reutilizável de turmas-alvo
+// =====================================================================
+// 3 modos:
+//   - 'all'    → enviar para todas as turmas da série
+//   - 'single' → enviar para uma única turma (select)
+//   - 'multi'  → enviar para várias turmas selecionadas (checkboxes)
+//
+// Saída via onChange:
+//   { mode, classes: string[] }
+//     mode='all'    → classes = []
+//     mode='single' → classes = [c]
+//     mode='multi'  → classes = [c1, c2, ...]
+// =====================================================================
+interface TargetClassValue { mode: 'all' | 'single' | 'multi'; classes: string[] }
+
+const TargetClassPicker: React.FC<{
+  availableClasses: string[];
+  value: TargetClassValue;
+  onChange: (v: TargetClassValue) => void;
+}> = ({ availableClasses, value, onChange }) => {
+  return (
+    <div className="space-y-3">
+      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 block">Para quem enviar?</label>
+
+      {/* Modo */}
+      <div className="grid grid-cols-3 gap-2">
+        {([
+          { v: 'all',    label: '🌐 Todas',   sub: 'Toda a série' },
+          { v: 'single', label: '📍 Uma',     sub: 'Apenas 1 turma' },
+          { v: 'multi',  label: '✅ Várias',  sub: 'Selecionadas' },
+        ] as const).map(opt => (
+          <button
+            key={opt.v}
+            type="button"
+            onClick={() => onChange({ mode: opt.v, classes: opt.v === 'all' ? [] : value.classes.slice(0, opt.v === 'single' ? 1 : undefined) })}
+            className={`p-3 rounded-2xl border-2 text-left transition-all ${value.mode === opt.v ? 'bg-gradient-vibe text-white border-transparent shadow-glow-purple scale-[1.02]' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:scale-[1.01]'}`}
+          >
+            <p className="text-xs font-black tracking-tight">{opt.label}</p>
+            <p className={`text-[9px] font-bold uppercase tracking-widest mt-0.5 ${value.mode === opt.v ? 'text-white/85' : 'text-slate-400 dark:text-slate-500'}`}>{opt.sub}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* UI específica do modo */}
+      {value.mode === 'single' && (
+        <select
+          value={value.classes[0] || ''}
+          onChange={e => onChange({ mode: 'single', classes: e.target.value ? [e.target.value] : [] })}
+          className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-purple-100"
+        >
+          <option value="">— Selecione a turma —</option>
+          {availableClasses.map(c => <option key={c} value={c}>Turma {c}</option>)}
+        </select>
+      )}
+
+      {value.mode === 'multi' && (
+        <div className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-3">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <p className="text-[10px] font-black text-vibe-purple uppercase tracking-widest">
+              {value.classes.length} de {availableClasses.length} selecionadas
+            </p>
+            <div className="flex gap-1">
+              <button type="button" onClick={() => onChange({ mode: 'multi', classes: availableClasses.slice() })} className="text-[9px] font-black uppercase tracking-widest text-vibe-purple hover:underline px-2 py-1">
+                Todas
+              </button>
+              <button type="button" onClick={() => onChange({ mode: 'multi', classes: [] })} className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:underline px-2 py-1">
+                Nenhuma
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
+            {availableClasses.length === 0 && (
+              <p className="col-span-full text-center text-[10px] text-slate-400 py-4">Selecione uma série primeiro</p>
+            )}
+            {availableClasses.map(c => {
+              const checked = value.classes.includes(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => onChange({
+                    mode: 'multi',
+                    classes: checked ? value.classes.filter(x => x !== c) : [...value.classes, c],
+                  })}
+                  className={`px-2.5 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all ${checked ? 'bg-vibe-purple text-white border-vibe-purple shadow-md' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-vibe-purple/40'}`}
+                >
+                  {checked ? '✓ ' : ''}{c}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {value.mode === 'all' && (
+        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-widest ml-2 italic">
+          🌐 Todos os alunos da série selecionada vão receber.
+        </p>
+      )}
+    </div>
+  );
+};
+
 // Componente principal do Painel Administrativo
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -201,6 +305,11 @@ export const AdminDashboard: React.FC = () => {
   const [isGeneratingExam, setIsGeneratingExam] = useState(false);
   const [isPublishingExam, setIsPublishingExam] = useState(false);
   const [publishedExams, setPublishedExams] = useState<any[]>([]);
+
+  // Alvos de envio: substituem essayClass / examClass quando precisar de multi.
+  const [examTarget, setExamTarget] = useState<TargetClassValue>({ mode: 'all', classes: [] });
+  const [essayTarget, setEssayTarget] = useState<TargetClassValue>({ mode: 'all', classes: [] });
+  const [activityTarget, setActivityTarget] = useState<TargetClassValue>({ mode: 'all', classes: [] });
 
   // ── Banco de Temas ─────────────────────────────
   const [bankSelectedSubject, setBankSelectedSubject] = useState<string | null>(null);
@@ -692,11 +801,24 @@ export const AdminDashboard: React.FC = () => {
       setActivityQuestionsDraft([...activityQuestionsDraft, insertedQ]);
 
       if (!savedActivities.includes(selectedLessonForEdit.id)) {
-        const { error: actErr } = await supabase.from('activities').insert({
+        // Aplica a segmentação de turma escolhida no modal
+        const actPayload: any = {
           lesson_id: selectedLessonForEdit.id,
           title: `Atividade: ${selectedLessonForEdit.title}`,
-        });
-        if (actErr) console.warn('Falha ao criar atividade vínculo:', actErr);
+        };
+        if (activityTarget.mode === 'single' && activityTarget.classes[0]) actPayload.school_class = activityTarget.classes[0];
+        if (activityTarget.mode === 'multi' && activityTarget.classes.length > 0) actPayload.school_classes = activityTarget.classes;
+        // tolerante a schema sem essas colunas
+        let lastErr: any = null;
+        for (let i = 0; i < 4; i++) {
+          const r = await supabase.from('activities').insert(actPayload);
+          if (!r.error) { lastErr = null; break; }
+          lastErr = r.error;
+          const m = String(r.error.message || '').match(/'([^']+)' column of/i);
+          const miss = m?.[1];
+          if (miss && (miss in actPayload)) { delete actPayload[miss]; } else break;
+        }
+        if (lastErr) console.warn('Falha ao criar atividade vínculo:', lastErr);
         fetchSavedActivities();
       }
 
@@ -869,13 +991,24 @@ export const AdminDashboard: React.FC = () => {
     if (!confirm(`Publicar a redação "${title}" para os alunos?`)) return;
     setIsPublishingEssay(true);
     try {
+      // Resolve campos de turma-alvo
+      let schoolClassSingle: string | null = null;
+      let schoolClassesArray: string[] | null = null;
+      if (essayTarget.mode === 'single') {
+        if (!essayTarget.classes[0]) { alert('Selecione a turma alvo.'); setIsPublishingEssay(false); return; }
+        schoolClassSingle = essayTarget.classes[0];
+      } else if (essayTarget.mode === 'multi') {
+        if (essayTarget.classes.length === 0) { alert('Selecione pelo menos uma turma.'); setIsPublishingEssay(false); return; }
+        schoolClassesArray = essayTarget.classes;
+      }
       const payload: any = {
         subject: teacherSubject || 'Geral',
         grade: String(essayGrade),
         bimester: String(essayBimester),
         type: 'essay',
         title,
-        school_class: essayClass === 'all' ? null : essayClass,
+        school_class: schoolClassSingle,
+        school_classes: schoolClassesArray,
         topics: [],
         // Pra reusar a infra do simulado, guardamos a redação como
         // uma única "questão" do tipo essay com o título no enunciado.
@@ -1007,13 +1140,24 @@ export const AdminDashboard: React.FC = () => {
     if (!confirm(`Publicar este simulado? ${examQuestionsDraft.length} questões serão liberadas para os alunos.`)) return;
     setIsPublishingExam(true);
     try {
+      // Resolve campos de turma-alvo a partir do estado examTarget
+      let schoolClassSingle: string | null = null;
+      let schoolClassesArray: string[] | null = null;
+      if (examTarget.mode === 'single') {
+        if (!examTarget.classes[0]) { alert('Selecione a turma alvo.'); setIsPublishingExam(false); return; }
+        schoolClassSingle = examTarget.classes[0];
+      } else if (examTarget.mode === 'multi') {
+        if (examTarget.classes.length === 0) { alert('Selecione pelo menos uma turma.'); setIsPublishingExam(false); return; }
+        schoolClassesArray = examTarget.classes;
+      }
       const payload: any = {
         subject: teacherSubject || 'Geral',
         grade: String(examGrade),
         bimester: String(examBimester),
         type: 'exam',
         title: examTitle.trim() || `Simulado - ${examBimester}º Bimestre`,
-        school_class: examClass === 'all' ? null : examClass,
+        school_class: schoolClassSingle,
+        school_classes: schoolClassesArray,
         topics: examTopics.split(',').map(t => t.trim()).filter(Boolean),
         questions: examQuestionsDraft,
       };
@@ -1273,6 +1417,16 @@ export const AdminDashboard: React.FC = () => {
 
   // Turmas disponíveis: filtra null/admin, e quando uma série está selecionada
   // mostra apenas as turmas daquela série (ex.: filtro 1ª → só 13.xx).
+  // Turmas disponíveis para uma série específica (independente do filtro da toolbar).
+  const classesForGrade = (gradeStr: string): string[] => {
+    const all = students
+      .filter(s => s.role !== 'admin')
+      .map(s => s.school_class)
+      .filter((c: any): c is string => Boolean(c) && c !== 'N/A');
+    const filtered = !gradeStr || gradeStr === 'all' ? all : all.filter(c => c.charAt(0) === gradeStr);
+    return Array.from(new Set(filtered)).sort();
+  };
+
   const classOptions = useMemo(() => {
     const classes = students
       .filter(s => s.role !== 'admin')
@@ -2300,18 +2454,21 @@ export const AdminDashboard: React.FC = () => {
                     onChange={e => setExamTopics(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
                   />
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <select value={examGrade} onChange={e => setExamGrade(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
                       <option value="1">1ª Série</option><option value="2">2ª Série</option><option value="3">3ª Série</option>
                     </select>
                     <select value={examBimester} onChange={e => setExamBimester(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
                       <option value="1">1º Bimestre</option><option value="2">2º Bimestre</option><option value="3">3º Bimestre</option><option value="4">4º Bimestre</option>
                     </select>
-                    <select value={examClass} onChange={e => setExamClass(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
-                      <option value="all">Todas as Turmas</option>
-                      {classOptions.map(c => <option key={c} value={c}>Turma {c}</option>)}
-                    </select>
                   </div>
+
+                  <TargetClassPicker
+                    availableClasses={classesForGrade(examGrade)}
+                    value={examTarget}
+                    onChange={setExamTarget}
+                  />
+
                   <button
                     onClick={handleGenerateExam}
                     disabled={isGeneratingExam}
@@ -2535,7 +2692,7 @@ export const AdminDashboard: React.FC = () => {
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <select value={essayGrade} onChange={e => setEssayGrade(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
                         <option value="1">1ª Série</option>
                         <option value="2">2ª Série</option>
@@ -2547,11 +2704,13 @@ export const AdminDashboard: React.FC = () => {
                         <option value="3">3º Bimestre</option>
                         <option value="4">4º Bimestre</option>
                       </select>
-                      <select value={essayClass} onChange={e => setEssayClass(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
-                        <option value="all">Todas as Turmas</option>
-                        {classOptions.map(c => <option key={c} value={c}>Turma {c}</option>)}
-                      </select>
                     </div>
+
+                    <TargetClassPicker
+                      availableClasses={classesForGrade(essayGrade)}
+                      value={essayTarget}
+                      onChange={setEssayTarget}
+                    />
 
                     <button
                       onClick={handlePublishEssay}
@@ -2808,6 +2967,19 @@ export const AdminDashboard: React.FC = () => {
 
                  {/* Coluna: Nova Questão */}
                  <div className="space-y-6 bg-slate-50/50 dark:bg-slate-800/30 p-8 rounded-[32px] border dark:border-slate-800 self-start">
+                    {/* Seletor de turmas-alvo da atividade (só pra atividade nova; depois de criada o vínculo já existe) */}
+                    {!savedActivities.includes(selectedLessonForEdit?.id) && (
+                      <div className="pb-4 mb-2 border-b border-dashed dark:border-slate-700">
+                        <TargetClassPicker
+                          availableClasses={classesForGrade(String(selectedLessonForEdit?.id?.charAt(0) || ''))}
+                          value={activityTarget}
+                          onChange={setActivityTarget}
+                        />
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-2 ml-2 italic">
+                          A segmentação se aplica quando a primeira questão for adicionada.
+                        </p>
+                      </div>
+                    )}
                     <h4 className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest flex items-center gap-2">
                        <Wand2 size={14}/> Cadastrar Novo Item
                     </h4>

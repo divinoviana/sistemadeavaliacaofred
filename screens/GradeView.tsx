@@ -6,6 +6,7 @@ import { Book, ArrowLeft, ShieldAlert, ChevronRight, BrainCircuit, CheckCircle2,
 import { Subject } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { isItemTargetedAtClass } from '../data_helpers';
 
 export const GradeView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -49,7 +50,7 @@ export const GradeView: React.FC = () => {
       if (examsErr) throw examsErr;
 
       const filteredExams = (examsData || []).filter((exam: any) =>
-        !exam.school_class || exam.school_class === String(student.school_class).trim()
+        isItemTargetedAtClass(exam, String(student.school_class).trim())
       );
 
       const { data: subsData, error: subsErr } = await supabase
@@ -64,8 +65,9 @@ export const GradeView: React.FC = () => {
       );
 
       // Aluno só vê aulas onde o professor publicou atividade COM ao menos uma questão
+      // e que esteja segmentada pra turma dele (ou pra todas).
       const [actsRes, qsRes] = await Promise.all([
-        supabase.from('activities').select('lesson_id'),
+        supabase.from('activities').select('lesson_id,school_class,school_classes'),
         supabase.from('questions').select('lesson_id').eq('subject', subjectKey),
       ]);
 
@@ -74,11 +76,12 @@ export const GradeView: React.FC = () => {
         if (row.lesson_id) lessonIdsWithQuestions.add(row.lesson_id);
       });
 
+      const myClass = String(student.school_class).trim();
       const publishedIds = new Set<string>();
       (actsRes.data || []).forEach((row: any) => {
-        if (row.lesson_id && lessonIdsWithQuestions.has(row.lesson_id)) {
-          publishedIds.add(row.lesson_id);
-        }
+        if (!row.lesson_id || !lessonIdsWithQuestions.has(row.lesson_id)) return;
+        if (!isItemTargetedAtClass(row, myClass)) return;
+        publishedIds.add(row.lesson_id);
       });
 
       setExams(filteredExams);

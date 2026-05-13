@@ -8,6 +8,7 @@ import { Subject } from '../types';
 import { curriculumData } from '../data';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { isItemTargetedAtClass } from '../data_helpers';
 
 export const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -38,7 +39,7 @@ export const Home: React.FC = () => {
       if (examsErr) throw examsErr;
 
       const examData = (examsData || []).filter((exam: any) =>
-        !exam.school_class || exam.school_class === String(student.school_class).trim()
+        isItemTargetedAtClass(exam, String(student.school_class).trim())
       );
 
       const { data: subsData, error: subsErr } = await supabase
@@ -71,7 +72,7 @@ export const Home: React.FC = () => {
       });
 
       const [actsRes, qsRes] = await Promise.all([
-        supabase.from('activities').select('lesson_id'),
+        supabase.from('activities').select('lesson_id,school_class,school_classes'),
         supabase.from('questions').select('lesson_id'),
       ]);
 
@@ -80,10 +81,13 @@ export const Home: React.FC = () => {
         if (row.lesson_id) lessonIdsWithQuestions.add(row.lesson_id);
       });
 
+      const myClass = String(student.school_class).trim();
       const counts: Record<string, number> = {};
       (actsRes.data || []).forEach((row: any) => {
         const lid = row.lesson_id;
         if (!lid || !lessonIdsOfMyGrade.has(lid) || !lessonIdsWithQuestions.has(lid)) return;
+        // Respeita segmentação da atividade pela turma do aluno
+        if (!isItemTargetedAtClass(row, myClass)) return;
         const subj = lessonSubjectMap[lid];
         if (!subj) return;
         counts[subj] = (counts[subj] || 0) + 1;
