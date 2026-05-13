@@ -1419,12 +1419,12 @@ export const AdminDashboard: React.FC = () => {
   // mostra apenas as turmas daquela série (ex.: filtro 1ª → só 13.xx).
   // Turmas disponíveis para uma série específica (independente do filtro da toolbar).
   const classesForGrade = (gradeStr: string): string[] => {
-    const all = students
+    const all: string[] = students
       .filter(s => s.role !== 'admin')
-      .map(s => s.school_class)
+      .map((s: any) => s.school_class as string)
       .filter((c: any): c is string => Boolean(c) && c !== 'N/A');
     const filtered = !gradeStr || gradeStr === 'all' ? all : all.filter(c => c.charAt(0) === gradeStr);
-    return Array.from(new Set(filtered)).sort();
+    return Array.from(new Set<string>(filtered)).sort();
   };
 
   const classOptions = useMemo(() => {
