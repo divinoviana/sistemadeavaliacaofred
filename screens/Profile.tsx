@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Upload, X, ArrowLeft, Loader2, Save, User } from 'lucide-react';
+import { Camera, Upload, X, ArrowLeft, Loader2, Save, User, Pencil, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
@@ -11,6 +11,9 @@ export const Profile: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [newPhoto, setNewPhoto] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -30,12 +33,11 @@ export const Profile: React.FC = () => {
     if (videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const video = videoRef.current;
-      
-      // Cap max resolution to prevent exceeding 1MB Firestore limit
+
       const maxDim = 512;
       let width = video.videoWidth;
       let height = video.videoHeight;
-      
+
       if (width > maxDim || height > maxDim) {
         if (width > height) {
           height = (maxDim / width) * height;
@@ -50,13 +52,34 @@ export const Profile: React.FC = () => {
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       ctx?.drawImage(video, 0, 0, width, height);
-      
-      // Use lower quality to ensure size is below 1MB
+
       setNewPhoto(canvas.toDataURL('image/jpeg', 0.6));
-      
+
       const stream = video.srcObject as MediaStream;
       stream.getTracks().forEach(t => t.stop());
       setShowCamera(false);
+    }
+  };
+
+  const handleSaveName = async () => {
+    const trimmed = newName.trim();
+    if (!trimmed || !student || trimmed === student.name) {
+      setEditingName(false);
+      return;
+    }
+    setSavingName(true);
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({ name: trimmed })
+        .eq('id', student.id);
+      if (error) throw error;
+      updateStudentData({ name: trimmed });
+      setEditingName(false);
+    } catch (err: any) {
+      alert('Erro ao salvar nome: ' + (err?.message || 'tente novamente.'));
+    } finally {
+      setSavingName(false);
     }
   };
 
@@ -131,10 +154,39 @@ export const Profile: React.FC = () => {
             )}
           </div>
 
-          <div className="space-y-1">
-            <h3 className="text-2xl font-black tracking-tighter font-display">
-              <span className="text-gradient-vibe">{student.name}</span>
-            </h3>
+          <div className="space-y-2">
+            {editingName ? (
+              <div className="flex items-center gap-2 justify-center">
+                <input
+                  autoFocus
+                  type="text"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingName(false); }}
+                  className="text-xl font-black tracking-tighter font-display text-center bg-slate-100 dark:bg-slate-800 border-2 border-vibe-purple rounded-xl px-3 py-1 outline-none w-48 dark:text-white"
+                  maxLength={60}
+                />
+                <button onClick={handleSaveName} disabled={savingName} className="p-2 rounded-xl bg-gradient-vibe text-white hover:scale-110 transition-all disabled:opacity-50">
+                  {savingName ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                </button>
+                <button onClick={() => setEditingName(false)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:scale-110 transition-all dark:text-slate-300">
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 justify-center">
+                <h3 className="text-2xl font-black tracking-tighter font-display">
+                  <span className="text-gradient-vibe">{student.name}</span>
+                </h3>
+                <button
+                  onClick={() => { setNewName(student.name); setEditingName(true); }}
+                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:scale-110 transition-all text-slate-400 dark:text-slate-500 hover:text-vibe-purple"
+                  title="Editar nome"
+                >
+                  <Pencil size={13} />
+                </button>
+              </div>
+            )}
             <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">{student.grade}ª Série · Turma {student.school_class}</p>
           </div>
 
