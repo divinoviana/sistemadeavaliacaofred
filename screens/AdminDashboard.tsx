@@ -821,7 +821,9 @@ export const AdminDashboard: React.FC = () => {
           lesson_id: selectedLessonForEdit.id,
           title: `Atividade: ${selectedLessonForEdit.title}`,
         };
-        if (activityTarget.mode === 'single' && activityTarget.classes[0]) actPayload.school_class = activityTarget.classes[0];
+        // A tabela `activities` só tem `school_classes` (jsonb array).
+        // Tanto turma única quanto várias turmas vão pro mesmo campo.
+        if (activityTarget.mode === 'single' && activityTarget.classes[0]) actPayload.school_classes = [activityTarget.classes[0]];
         if (activityTarget.mode === 'multi' && activityTarget.classes.length > 0) actPayload.school_classes = activityTarget.classes;
         // tolerante a schema sem essas colunas
         let lastErr: any = null;

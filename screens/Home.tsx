@@ -153,8 +153,11 @@ export const Home: React.FC = () => {
         });
       });
 
+      // `activities` só tem a coluna `school_classes` (jsonb). Pedir
+      // `school_class` (singular) gera erro 400 no PostgREST e zera a
+      // contagem de atividades de todas as matérias.
       const [actsRes, qsRes] = await Promise.all([
-        supabase.from('activities').select('lesson_id,school_class,school_classes'),
+        supabase.from('activities').select('lesson_id,school_classes'),
         supabase.from('questions').select('lesson_id'),
       ]);
 

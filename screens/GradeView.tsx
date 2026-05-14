@@ -49,9 +49,14 @@ export const GradeView: React.FC = () => {
         .order('created_at', { ascending: false });
       if (examsErr) throw examsErr;
 
-      const filteredExams = (examsData || []).filter((exam: any) =>
-        isItemTargetedAtClass(exam, String(student.school_class).trim())
-      );
+      const filteredExams = (examsData || [])
+        // Redações NÃO entram na seção "Avaliação Bimestral" — elas
+        // aparecem como pendência na Home. Sem esse filtro a redação
+        // era renderizada como se fosse um simulado (efeito "duplicado").
+        .filter((exam: any) => exam.type !== 'essay' && exam.questions?.[0]?.type !== 'essay')
+        .filter((exam: any) =>
+          isItemTargetedAtClass(exam, String(student.school_class).trim())
+        );
 
       const { data: subsData, error: subsErr } = await supabase
         .from('submissions')
@@ -66,8 +71,11 @@ export const GradeView: React.FC = () => {
 
       // Aluno só vê aulas onde o professor publicou atividade COM ao menos uma questão
       // e que esteja segmentada pra turma dele (ou pra todas).
+      // IMPORTANTE: a tabela `activities` só tem `school_classes` (jsonb).
+      // Pedir `school_class` (singular) faz o PostgREST devolver 400 e
+      // o aluno acaba sem ver NENHUMA atividade. Selecionamos só o que existe.
       const [actsRes, qsRes] = await Promise.all([
-        supabase.from('activities').select('lesson_id,school_class,school_classes'),
+        supabase.from('activities').select('lesson_id,school_classes'),
         supabase.from('questions').select('lesson_id').eq('subject', subjectKey),
       ]);
 
