@@ -13,7 +13,7 @@ import {
   Clock, Send, BrainCircuit, Sparkles, FileText, CheckCircle2,
   Filter, Download, GraduationCap, ChevronRight, ClipboardEdit, 
   BarChart3, Printer, Wand2, Library, ListChecks, Database,
-  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target
+  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target, AlertTriangle
 } from 'lucide-react';
 
 // =====================================================================
@@ -2246,6 +2246,14 @@ export const AdminDashboard: React.FC = () => {
                       // Última entrega + quantas ainda sem feedback do prof
                       const lastDate = sortedSubs[0]?.submitted_at || sortedSubs[0]?.submission_date;
                       const pendingFeedback = sortedSubs.filter(s => !s.teacher_feedback).length;
+                      // Quantas entregas têm alerta de integridade (saiu da tela / colou)
+                      const flaggedCount = sortedSubs.filter(s => {
+                        const it = s.ai_feedback?.integrity
+                          || (Array.isArray(s.content) && s.content[0]
+                              ? { tab_switches: s.content[0].tab_switches, paste_attempts: s.content[0].paste_attempts }
+                              : null);
+                        return (Number(it?.tab_switches) || 0) > 0 || (Number(it?.paste_attempts) || 0) > 0;
+                      }).length;
 
                       return (
                         <details key={g.key} className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 shadow-sm group overflow-hidden" open={gIdx === 0 && groups.length === 1}>
@@ -2259,6 +2267,7 @@ export const AdminDashboard: React.FC = () => {
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
                                 Turma {g.school_class} · {sortedSubs.length} {sortedSubs.length === 1 ? 'entrega' : 'entregas'}
                                 {pendingFeedback > 0 && <span className="text-amber-600 dark:text-amber-400"> · {pendingFeedback} sem feedback</span>}
+                                {flaggedCount > 0 && <span className="text-red-600 dark:text-red-400"> · ⚠️ {flaggedCount} c/ alerta</span>}
                                 {lastDate && ` · última em ${new Date(lastDate).toLocaleDateString('pt-BR')}`}
                               </p>
                             </div>
@@ -2277,6 +2286,15 @@ export const AdminDashboard: React.FC = () => {
                               {sortedSubs.map((sub: any) => {
                                 const isEssay = sub.ai_feedback?.type === 'essay_enem' || String(sub.lesson_title || '').startsWith('Redação:');
                                 const isExam = !isEssay && (String(sub.lesson_title || '').toLowerCase().includes('avaliação bimestral') || String(sub.lesson_title || '').toLowerCase().includes('simulado'));
+                                // Monitor de integridade: lê de ai_feedback.integrity (novo)
+                                // ou do content[0] (redações antigas).
+                                const _integ = sub.ai_feedback?.integrity
+                                  || (Array.isArray(sub.content) && sub.content[0]
+                                      ? { tab_switches: sub.content[0].tab_switches, paste_attempts: sub.content[0].paste_attempts }
+                                      : null);
+                                const tabSw = Number(_integ?.tab_switches) || 0;
+                                const pasteAt = Number(_integ?.paste_attempts) || 0;
+                                const flagged = tabSw > 0 || pasteAt > 0;
                                 const score = Number(sub.score) || 0;
                                 const scoreClass = score >= 7 ? 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : score >= 5 ? 'bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400';
                                 const subjInfo = subjectsInfo[sub.subject as Subject];
@@ -2292,6 +2310,16 @@ export const AdminDashboard: React.FC = () => {
                                         {isEssay && <span className="px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded text-[8px] font-black uppercase tracking-widest shrink-0">Redação</span>}
                                         {isExam && <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded text-[8px] font-black uppercase tracking-widest shrink-0">Simulado</span>}
                                         {!sub.teacher_feedback && !isEssay && <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded text-[8px] font-black uppercase tracking-widest shrink-0">Pendente</span>}
+                                        {flagged && (
+                                          <span
+                                            title={`Saiu da tela ${tabSw}× · Tentou colar ${pasteAt}×`}
+                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded text-[8px] font-black uppercase tracking-widest shrink-0"
+                                          >
+                                            <AlertTriangle size={9}/> Integridade
+                                            {tabSw > 0 && ` · ${tabSw} saída${tabSw > 1 ? 's' : ''}`}
+                                            {pasteAt > 0 && ` · ${pasteAt} colar`}
+                                          </span>
+                                        )}
                                       </div>
                                       <p className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 leading-tight truncate">{sub.lesson_title}</p>
                                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
@@ -3796,13 +3824,6 @@ export const AdminDashboard: React.FC = () => {
                          )}
                        </div>
 
-                       {(viewingSubmission.content?.[0]?.tab_switches > 0 || viewingSubmission.content?.[0]?.paste_attempts > 0) && (
-                         <div className="mt-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40 rounded-xl p-3">
-                           <p className="text-[10px] text-amber-700 dark:text-amber-300 font-bold leading-relaxed flex items-center gap-2">
-                             🛡️ <strong>Sinais de integridade:</strong> aluno saiu da tela {viewingSubmission.content[0].tab_switches || 0}× e tentou colar texto externo {viewingSubmission.content[0].paste_attempts || 0}× durante a escrita.
-                           </p>
-                         </div>
-                       )}
                      </div>
                    </div>
                  )}
@@ -3834,6 +3855,39 @@ export const AdminDashboard: React.FC = () => {
                       )}
                    </div>
                  )}
+
+                 {/* Monitor de Integridade — vale para simulado E redação */}
+                 {(() => {
+                   const it = viewingSubmission.ai_feedback?.integrity
+                     || (Array.isArray(viewingSubmission.content) && viewingSubmission.content[0]
+                         ? { tab_switches: viewingSubmission.content[0].tab_switches, paste_attempts: viewingSubmission.content[0].paste_attempts }
+                         : null);
+                   const tabSw = Number(it?.tab_switches) || 0;
+                   const pasteAt = Number(it?.paste_attempts) || 0;
+                   if (tabSw === 0 && pasteAt === 0) return null;
+                   return (
+                     <div className="bg-red-50 dark:bg-red-900/10 p-6 rounded-[32px] border-2 border-red-200 dark:border-red-800/40">
+                       <div className="flex items-center gap-2 mb-3">
+                         <AlertTriangle className="text-red-600 dark:text-red-400" size={18}/>
+                         <h4 className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest">Monitor de Integridade</h4>
+                       </div>
+                       <div className="flex flex-wrap gap-3">
+                         <div className="flex-1 min-w-[140px] bg-white dark:bg-slate-900 rounded-2xl p-4 border border-red-100 dark:border-red-900/30">
+                           <p className="text-3xl font-black text-red-600 dark:text-red-400">{tabSw}</p>
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Saídas da tela / troca de aba</p>
+                         </div>
+                         <div className="flex-1 min-w-[140px] bg-white dark:bg-slate-900 rounded-2xl p-4 border border-red-100 dark:border-red-900/30">
+                           <p className="text-3xl font-black text-red-600 dark:text-red-400">{pasteAt}</p>
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Tentativas de colar texto</p>
+                         </div>
+                       </div>
+                       <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed mt-3">
+                         🛡️ Esses números indicam que o aluno saiu da janela da avaliação ou tentou colar conteúdo externo.
+                         Não é prova de cópia, mas é um sinal para conversar com o estudante ou revisar a nota manualmente.
+                       </p>
+                     </div>
+                   );
+                 })()}
 
                  {/* Lista de Respostas */}
                  <div className="space-y-6">

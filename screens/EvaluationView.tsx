@@ -37,11 +37,12 @@ export const EvaluationView: React.FC = () => {
     }
   }, [examId, student, isAuthLoading]);
 
-  // Segurança da redação: contar saídas da aba/janela enquanto a tela
-  // estiver aberta e o aluno ainda não enviou. Só ativa quando é
-  // redação (isEssay).
+  // Monitor de integridade: conta saídas da aba/janela enquanto a
+  // avaliação está aberta e o aluno ainda não enviou. Vale tanto para
+  // REDAÇÃO quanto para SIMULADO — sair da tela durante a prova é o
+  // principal sinal de uso de IA / consulta externa.
   useEffect(() => {
-    if (!isEssay || isFinished) return;
+    if (isFinished || checkingStatus || !exam) return;
     const onVis = () => {
       if (document.visibilityState === 'hidden') {
         setTabSwitches(n => n + 1);
@@ -49,7 +50,7 @@ export const EvaluationView: React.FC = () => {
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [isEssay, isFinished]);
+  }, [isFinished, checkingStatus, exam]);
 
   const checkAttemptAndFetchExam = async () => {
     if (!examId || !student) return;
@@ -175,6 +176,8 @@ export const EvaluationView: React.FC = () => {
           generalComment,
           corrections: [],
           enem: enemEval || null,
+          // Monitor de integridade — lido pelo painel do professor
+          integrity: { tab_switches: tabSwitches, paste_attempts: pasteAttempts },
         },
         teacher_feedback: null,
         submitted_at: nowIso,
@@ -303,8 +306,12 @@ export const EvaluationView: React.FC = () => {
     finalScore = Math.round(finalScore * 10) / 10; // 1 casa decimal
     setScore(finalScore);
 
-    const generalComment = aiGeneralComment ||
+    const baseComment = aiGeneralComment ||
       `Simulado finalizado. Objetivas: ${objectiveCorrect}/${objectiveQs.length} acertos. Discursivas: nota média ${discursiveScoreAvg.toFixed(1)}.`;
+    const integrityNote = (tabSwitches > 0 || pasteAttempts > 0)
+      ? ` ⚠️ Integridade: aluno saiu da tela ${tabSwitches}× e tentou colar ${pasteAttempts}×.`
+      : '';
+    const generalComment = baseComment + integrityNote;
 
     try {
       const nowIso = new Date().toISOString();
@@ -323,7 +330,12 @@ export const EvaluationView: React.FC = () => {
           answer: c.studentAnswer,
           correctAnswer: c.correctAnswer,
         })),
-        ai_feedback: { generalComment, corrections: correctionDetails },
+        ai_feedback: {
+          generalComment,
+          corrections: correctionDetails,
+          // Monitor de integridade — lido pelo painel do professor
+          integrity: { tab_switches: tabSwitches, paste_attempts: pasteAttempts },
+        },
         teacher_feedback: null,
         submitted_at: nowIso,
         submission_date: nowIso,
@@ -465,12 +477,27 @@ export const EvaluationView: React.FC = () => {
               <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl flex items-center justify-between border-2 border-indigo-100 dark:border-indigo-900 transition-colors duration-300">
                  <div className="flex items-center gap-3">
                     <Info className="text-indigo-500 dark:text-indigo-400" size={20}/>
-                    <p className="text-xs font-bold text-slate-600 dark:text-slate-400">Atenção: Você só pode realizar esta prova uma única vez.</p>
+                    <p className="text-xs font-bold text-slate-600 dark:text-slate-400">Atenção: Você só pode realizar esta prova uma única vez. <strong>Não saia desta tela</strong> — saídas ficam registradas para o professor.</p>
                  </div>
                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-2xl font-black text-slate-400 dark:text-slate-500 text-xs">
                     <Clock size={14}/> QUESTÕES: {Object.keys(answers).length}/{exam.questions.length}
                  </div>
               </div>
+
+              {(tabSwitches > 0 || pasteAttempts > 0) && (
+                <div className="flex flex-wrap items-center gap-2 -mt-4 px-2">
+                  {tabSwitches > 0 && (
+                    <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
+                      <AlertTriangle size={12}/> {tabSwitches} saída{tabSwitches > 1 ? 's' : ''} de tela registrada{tabSwitches > 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {pasteAttempts > 0 && (
+                    <span className="inline-flex items-center gap-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
+                      🚫 {pasteAttempts} tentativa{pasteAttempts > 1 ? 's' : ''} de colar
+                    </span>
+                  )}
+                </div>
+              )}
 
               {exam.visualContent && (
                  <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-xl border border-slate-100 dark:border-slate-800 p-8 mb-8 transition-colors duration-300">
@@ -520,6 +547,13 @@ export const EvaluationView: React.FC = () => {
                            <textarea
                              value={String(answers[q.id] || '')}
                              onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                             onPaste={(e) => {
+                               e.preventDefault();
+                               setPasteAttempts(n => n + 1);
+                               alert('🚫 Não é permitido colar texto. Digite a sua própria resposta.');
+                             }}
+                             onDrop={(e) => e.preventDefault()}
+                             onContextMenu={(e) => e.preventDefault()}
                              placeholder="Digite sua resposta argumentativa aqui (mínimo 30 caracteres)..."
                              rows={6}
                              className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-2xl p-5 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-tocantins-blue dark:focus:border-tocantins-yellow focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10 leading-relaxed"
