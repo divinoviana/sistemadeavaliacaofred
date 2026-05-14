@@ -346,6 +346,7 @@ export const AdminDashboard: React.FC = () => {
   const [viewingSubmission, setViewingSubmission] = useState<any | null>(null);
   const [manualFeedback, setManualFeedback] = useState('');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+  const [isRequestingRedo, setIsRequestingRedo] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
 
   const [isSeedingStudents, setIsSeedingStudents] = useState(false);
@@ -1421,6 +1422,40 @@ export const AdminDashboard: React.FC = () => {
       console.error(e);
     } finally {
       setIsSavingFeedback(false);
+    }
+  };
+
+  // Pedir para o aluno REFAZER uma atividade / simulado / redação.
+  // Remove a entrega atual: como o bloqueio "já fez" do aluno se baseia
+  // na existência da submissão, apagá-la libera uma nova tentativa.
+  const handleRequestRedo = async () => {
+    if (!viewingSubmission || isRequestingRedo) return;
+    const tipo = viewingSubmission.ai_feedback?.type === 'essay_enem' || String(viewingSubmission.lesson_title || '').startsWith('Redação:')
+      ? 'a redação'
+      : (String(viewingSubmission.lesson_title || '').toLowerCase().includes('simulado') || String(viewingSubmission.lesson_title || '').toLowerCase().includes('avaliação bimestral'))
+        ? 'o simulado'
+        : 'a atividade';
+    const ok = confirm(
+      `Pedir para ${viewingSubmission.student_name} refazer ${tipo} "${viewingSubmission.lesson_title}"?\n\n` +
+      `⚠️ A entrega atual (nota, respostas e feedback) será REMOVIDA e o aluno poderá fazer tudo de novo do zero.\n\n` +
+      `Avise o aluno — não há notificação automática. Esta ação não pode ser desfeita.`
+    );
+    if (!ok) return;
+    setIsRequestingRedo(true);
+    try {
+      const { error } = await supabase
+        .from('submissions')
+        .delete()
+        .eq('id', viewingSubmission.id);
+      if (error) throw error;
+      alert(`Pronto! ${viewingSubmission.student_name} já pode refazer "${viewingSubmission.lesson_title}".`);
+      setViewingSubmission(null);
+      fetchSubmissions();
+    } catch (e: any) {
+      alert('Erro ao liberar nova tentativa: ' + (e?.message || ''));
+      console.error(e);
+    } finally {
+      setIsRequestingRedo(false);
     }
   };
 
@@ -3915,10 +3950,19 @@ export const AdminDashboard: React.FC = () => {
                       placeholder="Escreva orientações de melhoria para o aluno..."
                       className="w-full h-32 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-2xl px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10 transition-all resize-none"
                     />
-                    <div className="flex justify-end">
-                       <button 
+                    <div className="flex flex-wrap justify-between items-center gap-3">
+                       <button
+                         onClick={handleRequestRedo}
+                         disabled={isRequestingRedo || isSavingFeedback}
+                         className="flex items-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:scale-105 transition-all cursor-pointer disabled:opacity-50"
+                         title="Remove esta entrega e libera o aluno para fazer de novo"
+                       >
+                          {isRequestingRedo ? <Loader2 className="animate-spin" size={14}/> : <RotateCw size={14}/>}
+                          Pedir para Refazer
+                       </button>
+                       <button
                          onClick={handleSaveFeedback}
-                         disabled={isSavingFeedback}
+                         disabled={isSavingFeedback || isRequestingRedo}
                          className="flex items-center gap-2 px-8 py-3 bg-tocantins-blue text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:scale-105 transition-all cursor-pointer disabled:opacity-50"
                        >
                           {isSavingFeedback ? <Loader2 className="animate-spin" size={14}/> : <Send size={14}/>}
