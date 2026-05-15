@@ -13,7 +13,7 @@ import {
   Clock, Send, BrainCircuit, Sparkles, FileText, CheckCircle2,
   Filter, Download, GraduationCap, ChevronRight, ClipboardEdit, 
   BarChart3, Printer, Wand2, Library, ListChecks, Database,
-  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target, AlertTriangle
+  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target, AlertTriangle, ExternalLink
 } from 'lucide-react';
 
 // =====================================================================
@@ -1721,7 +1721,15 @@ export const AdminDashboard: React.FC = () => {
           </nav>
         </div>
 
-        <div className="mt-auto p-8 border-t dark:border-slate-800">
+        <div className="mt-auto p-8 border-t dark:border-slate-800 space-y-2">
+           <a
+             href="https://sge.seduc.to.pontoid.com.br/Acesso/Entrar?ReturnUrl=%2f"
+             target="_blank"
+             rel="noopener noreferrer"
+             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 hover:translate-x-1 transition-all"
+           >
+             <ExternalLink size={18}/> SGE — Secretaria TO
+           </a>
            <button
              onClick={logoutTeacher}
              className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.25em] text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:scale-105 transition-all cursor-pointer"

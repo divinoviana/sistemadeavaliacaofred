@@ -272,44 +272,24 @@ export const Home: React.FC = () => {
           </div>
         </div>
 
-        {/* Links externos — sistemas do Estado do Tocantins */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-in zoom-in duration-500">
-          <a
-            href="https://sge.seduc.to.pontoid.com.br/Acesso/Entrar?ReturnUrl=%2f"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="relative overflow-hidden bg-gradient-to-br from-blue-600 to-blue-800 p-1 rounded-[32px] shadow-xl hover:-translate-y-1 hover:scale-[1.02] transition-all group"
-          >
-            <div className="bg-white dark:bg-slate-900 rounded-[28px] p-6 flex items-center gap-5 h-full">
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl flex items-center justify-center text-white text-2xl shrink-0 shadow-md group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
-                🏫
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-black tracking-tight font-display text-slate-800 dark:text-slate-100">SGE — Sistema de Gestão Escolar</h3>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Secretaria de Educação · Tocantins</p>
-              </div>
-              <ExternalLink size={18} className="text-blue-400 group-hover:text-blue-600 shrink-0 transition-colors" />
+        {/* Portal do Aluno — SEDUC Tocantins */}
+        <a
+          href="https://portaldoaluno.seduc.to.pontoid.com.br/Home/Login"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="relative overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-700 p-1 rounded-[32px] shadow-xl hover:-translate-y-1 hover:scale-[1.02] transition-all group animate-in zoom-in duration-500"
+        >
+          <div className="bg-white dark:bg-slate-900 rounded-[28px] p-6 flex items-center gap-5">
+            <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl flex items-center justify-center text-white text-2xl shrink-0 shadow-md group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
+              🎓
             </div>
-          </a>
-
-          <a
-            href="https://portaldoaluno.seduc.to.pontoid.com.br/Home/Login"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="relative overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-700 p-1 rounded-[32px] shadow-xl hover:-translate-y-1 hover:scale-[1.02] transition-all group"
-          >
-            <div className="bg-white dark:bg-slate-900 rounded-[28px] p-6 flex items-center gap-5 h-full">
-              <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl flex items-center justify-center text-white text-2xl shrink-0 shadow-md group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
-                🎓
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-black tracking-tight font-display text-slate-800 dark:text-slate-100">Portal do Aluno</h3>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Boletins e notas · SEDUC Tocantins</p>
-              </div>
-              <ExternalLink size={18} className="text-emerald-400 group-hover:text-emerald-600 shrink-0 transition-colors" />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-black tracking-tight font-display text-slate-800 dark:text-slate-100">Portal do Aluno — SEDUC Tocantins</h3>
+              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Consulte seus boletins e notas no sistema do Estado</p>
             </div>
-          </a>
-        </div>
+            <ExternalLink size={18} className="text-emerald-400 group-hover:text-emerald-600 shrink-0 transition-colors" />
+          </div>
+        </a>
 
         {pendingExams.length > 0 && (
            <div className="relative overflow-hidden bg-gradient-fire p-1 rounded-[40px] shadow-glow-orange animate-in zoom-in duration-500">
