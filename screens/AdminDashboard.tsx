@@ -1459,6 +1459,29 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const [yearTurnoverLoading, setYearTurnoverLoading] = useState(false);
+
+  const handleYearTurnover = async () => {
+    const third = students.filter(s => String(s.grade) === '3');
+    if (third.length === 0) { alert('Nenhum aluno da 3ª série encontrado.'); return; }
+    const confirmed = window.confirm(
+      `⚠️ VIRADA DE ANO\n\nEssa ação irá EXCLUIR permanentemente ${third.length} aluno(s) da 3ª série do banco de dados.\n\nEssa operação não pode ser desfeita.\n\nConfirmar?`
+    );
+    if (!confirmed) return;
+    setYearTurnoverLoading(true);
+    try {
+      const ids = third.map(s => s.id);
+      const { error } = await supabase.from('students').delete().in('id', ids);
+      if (error) throw error;
+      alert(`✅ ${third.length} aluno(s) da 3ª série removidos com sucesso.\n\nObs: as contas de login (auth.users) precisam ser removidas manualmente pelo Supabase Dashboard.`);
+      fetchStudents();
+    } catch (e: any) {
+      alert('Erro ao remover alunos: ' + (e?.message || ''));
+    } finally {
+      setYearTurnoverLoading(false);
+    }
+  };
+
   const filteredStudents = useMemo(() => {
     return students.filter(st => {
       const matchesSearch = st.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -2464,16 +2487,27 @@ export const AdminDashboard: React.FC = () => {
 
           {activeTab === 'students' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <div className="flex justify-end gap-2 mb-4">
+               <div className="flex justify-end gap-2 mb-4 flex-wrap">
                   {isSuper && (
-                    <button 
-                      onClick={handleSeedStudents}
-                      disabled={isSeedingStudents}
-                      className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all cursor-pointer shadow-lg shadow-emerald-500/20 disabled:opacity-50"
-                    >
-                      {isSeedingStudents ? <Loader2 className="animate-spin" size={16}/> : <Users size={16}/>}
-                      Sincronizar Estudantes
-                    </button>
+                    <>
+                      <button
+                        onClick={handleSeedStudents}
+                        disabled={isSeedingStudents}
+                        className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all cursor-pointer shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                      >
+                        {isSeedingStudents ? <Loader2 className="animate-spin" size={16}/> : <Users size={16}/>}
+                        Sincronizar Estudantes
+                      </button>
+                      <button
+                        onClick={handleYearTurnover}
+                        disabled={yearTurnoverLoading}
+                        className="flex items-center gap-2 px-6 py-3 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-all cursor-pointer shadow-lg shadow-rose-500/20 disabled:opacity-50"
+                        title="Remove todos os alunos da 3ª série (virada de ano letivo)"
+                      >
+                        {yearTurnoverLoading ? <Loader2 className="animate-spin" size={16}/> : <GraduationCap size={16}/>}
+                        Virada de Ano · Excluir 3ª Série
+                      </button>
+                    </>
                   )}
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
