@@ -1,9 +1,16 @@
 
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Upload, X, ArrowLeft, Loader2, Save, User, Pencil, Check } from 'lucide-react';
+import { Camera, Upload, X, ArrowLeft, Loader2, Save, User, Pencil, Check, GraduationCap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+
+const getClassesByGrade = (grade: string) => {
+  if (grade === '1') return Array.from({ length: 7 }, (_, i) => `13.0${i + 1}`);
+  if (grade === '2') return Array.from({ length: 8 }, (_, i) => `23.0${i + 1}`);
+  if (grade === '3') return Array.from({ length: 9 }, (_, i) => `33.0${i + 1}`);
+  return [];
+};
 
 export const Profile: React.FC = () => {
   const { student, updateStudentData } = useAuth();
@@ -14,6 +21,10 @@ export const Profile: React.FC = () => {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [editingClass, setEditingClass] = useState(false);
+  const [newGrade, setNewGrade] = useState('');
+  const [newClass, setNewClass] = useState('');
+  const [savingClass, setSavingClass] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -80,6 +91,25 @@ export const Profile: React.FC = () => {
       alert('Erro ao salvar nome: ' + (err?.message || 'tente novamente.'));
     } finally {
       setSavingName(false);
+    }
+  };
+
+  const handleSaveClass = async () => {
+    if (!newGrade || !newClass || !student) { setEditingClass(false); return; }
+    if (newGrade === String(student.grade) && newClass === student.school_class) { setEditingClass(false); return; }
+    setSavingClass(true);
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({ grade: newGrade, school_class: newClass })
+        .eq('id', student.id);
+      if (error) throw error;
+      updateStudentData({ grade: newGrade, school_class: newClass });
+      setEditingClass(false);
+    } catch (err: any) {
+      alert('Erro ao salvar: ' + (err?.message || 'tente novamente.'));
+    } finally {
+      setSavingClass(false);
     }
   };
 
@@ -187,7 +217,48 @@ export const Profile: React.FC = () => {
                 </button>
               </div>
             )}
-            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">{student.grade}ª Série · Turma {student.school_class}</p>
+            {editingClass ? (
+              <div className="flex flex-col items-center gap-2 mt-1">
+                <div className="flex gap-2">
+                  <select
+                    value={newGrade}
+                    onChange={e => { setNewGrade(e.target.value); setNewClass(''); }}
+                    className="p-2 bg-slate-100 dark:bg-slate-800 border-2 border-vibe-purple rounded-xl text-xs font-black outline-none dark:text-white"
+                  >
+                    <option value="1">1ª Série</option>
+                    <option value="2">2ª Série</option>
+                    <option value="3">3ª Série</option>
+                  </select>
+                  <select
+                    value={newClass}
+                    onChange={e => setNewClass(e.target.value)}
+                    className="p-2 bg-slate-100 dark:bg-slate-800 border-2 border-vibe-purple rounded-xl text-xs font-black outline-none dark:text-white"
+                  >
+                    <option value="">Turma</option>
+                    {getClassesByGrade(newGrade).map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleSaveClass} disabled={savingClass || !newClass} className="px-4 py-2 rounded-xl bg-gradient-vibe text-white text-xs font-black hover:scale-105 transition-all disabled:opacity-50 flex items-center gap-1">
+                    {savingClass ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Confirmar
+                  </button>
+                  <button onClick={() => setEditingClass(false)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-black hover:scale-105 transition-all dark:text-slate-300">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 justify-center">
+                <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">{student.grade}ª Série · Turma {student.school_class}</p>
+                <button
+                  onClick={() => { setNewGrade(String(student.grade)); setNewClass(student.school_class); setEditingClass(true); }}
+                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:scale-110 transition-all text-slate-400 dark:text-slate-500 hover:text-vibe-purple"
+                  title="Trocar série / turma"
+                >
+                  <GraduationCap size={13} />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
