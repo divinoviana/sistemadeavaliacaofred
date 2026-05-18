@@ -13,7 +13,7 @@ import {
   Clock, Send, BrainCircuit, Sparkles, FileText, CheckCircle2,
   Filter, Download, GraduationCap, ChevronRight, ClipboardEdit, 
   BarChart3, Printer, Wand2, Library, ListChecks, Database,
-  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target, AlertTriangle, ExternalLink
+  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target, AlertTriangle, ExternalLink, KeyRound
 } from 'lucide-react';
 
 // =====================================================================
@@ -359,6 +359,38 @@ export const AdminDashboard: React.FC = () => {
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
+  // Modal de reset de senha (super admin)
+  const [resetPasswordStudent, setResetPasswordStudent] = useState<any | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!resetPasswordStudent || newPassword.length < 6 || isResettingPassword) return;
+    setIsResettingPassword(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-reset-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ student_id: resetPasswordStudent.id, new_password: newPassword }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erro desconhecido');
+      alert(`✅ Senha de ${resetPasswordStudent.name} alterada com sucesso!`);
+      setResetPasswordStudent(null);
+      setNewPassword('');
+    } catch (e: any) {
+      alert('Erro ao redefinir senha: ' + (e?.message || ''));
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAuthLoading && !teacherSubject && !isSuper) {
@@ -2527,7 +2559,7 @@ export const AdminDashboard: React.FC = () => {
                          <h4 className="font-black text-slate-800 dark:text-white uppercase tracking-tighter text-sm mb-1">{st.name}</h4>
                          <span className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest">{st.grade}ª Série • {st.school_class}</span>
 
-                         <div className="mt-4 flex gap-2">
+                         <div className="mt-4 flex gap-2 justify-center">
                             <button
                               onClick={() => openNotesModal(st)}
                               title="Anotações sobre o estudante"
@@ -2545,6 +2577,15 @@ export const AdminDashboard: React.FC = () => {
                             >
                                <MessageSquare size={18}/>
                             </button>
+                            {isSuper && (
+                              <button
+                                onClick={() => { setResetPasswordStudent(st); setNewPassword(''); }}
+                                title="Redefinir senha do estudante"
+                                className="p-2 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                              >
+                                <KeyRound size={18}/>
+                              </button>
+                            )}
                          </div>
                       </div>
                    </div>
@@ -4018,6 +4059,46 @@ export const AdminDashboard: React.FC = () => {
       )}
       </main>
     </div>
+
+    {/* Modal: Redefinir Senha (super admin) */}
+    {resetPasswordStudent && (
+      <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setResetPasswordStudent(null)}>
+        <div className="bg-white dark:bg-slate-900 rounded-[32px] shadow-2xl border dark:border-slate-800 w-full max-w-sm p-8 space-y-6" onClick={e => e.stopPropagation()}>
+          <div className="text-center">
+            <div className="w-14 h-14 bg-rose-100 dark:bg-rose-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <KeyRound size={28} className="text-rose-500"/>
+            </div>
+            <h3 className="text-lg font-black text-slate-800 dark:text-white tracking-tight">Redefinir Senha</h3>
+            <p className="text-xs text-slate-400 mt-1 font-bold uppercase tracking-widest">{resetPasswordStudent.name}</p>
+          </div>
+          <div className="space-y-3">
+            <input
+              type="password"
+              placeholder="Nova senha (mín. 6 caracteres)"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleResetPassword(); }}
+              className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl text-sm outline-none dark:text-white font-medium"
+              autoFocus
+            />
+            <p className="text-[10px] text-slate-400 text-center">A nova senha será aplicada imediatamente ao login do aluno.</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setResetPasswordStudent(null)} className="flex-1 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest hover:scale-105 transition-all">
+              Cancelar
+            </button>
+            <button
+              onClick={handleResetPassword}
+              disabled={isResettingPassword || newPassword.length < 6}
+              className="flex-1 py-3 rounded-2xl bg-rose-500 text-white font-black text-xs uppercase tracking-widest hover:bg-rose-600 hover:scale-105 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isResettingPassword ? <Loader2 size={14} className="animate-spin"/> : <KeyRound size={14}/>}
+              Salvar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 };
