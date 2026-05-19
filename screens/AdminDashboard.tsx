@@ -13,7 +13,7 @@ import {
   Clock, Send, BrainCircuit, Sparkles, FileText, CheckCircle2,
   Filter, Download, GraduationCap, ChevronRight, ClipboardEdit, 
   BarChart3, Printer, Wand2, Library, ListChecks, Database,
-  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target, AlertTriangle, ExternalLink, KeyRound
+  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target, AlertTriangle, ExternalLink, KeyRound, Menu
 } from 'lucide-react';
 
 // =====================================================================
@@ -243,6 +243,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Estados principais
   const [activeTab, setActiveTab] = useState<'question_bank' | 'submissions' | 'students' | 'messages' | 'lessons_list' | 'exam_generator' | 'essays' | 'attendance' | 'reports' | 'evaluations'>('lessons_list');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClass, setFilterClass] = useState('all');
@@ -1730,8 +1731,20 @@ export const AdminDashboard: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex transition-colors duration-300 relative">
       <div className="absolute inset-0 bg-mesh-bg opacity-40 dark:opacity-15 pointer-events-none"></div>
 
+      {/* Overlay escuro no mobile quando sidebar está aberta */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-slate-950/60 backdrop-blur-sm md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar — gradient brand */}
-      <aside className="w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r dark:border-slate-800 flex flex-col transition-colors relative z-10">
+      <aside className={`
+        fixed md:relative inset-y-0 left-0 z-30
+        w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r dark:border-slate-800 flex flex-col transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
         <div className="p-8">
           <div className="flex items-center gap-3 mb-8">
             <div className="w-12 h-12 bg-gradient-vibe rounded-[18px] flex items-center justify-center text-white shadow-glow-purple animate-float">
@@ -1762,7 +1775,7 @@ export const AdminDashboard: React.FC = () => {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id as any)}
+                  onClick={() => { setActiveTab(item.id as any); setSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all cursor-pointer ${
                     isActive
                       ? `${item.grad} text-white ${item.glow} translate-x-2 scale-[1.02]`
@@ -1794,10 +1807,19 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto h-screen p-8 relative z-10">
+      <main className="flex-1 overflow-y-auto h-screen p-4 md:p-8 relative z-10">
         <div className="max-w-6xl mx-auto">
           {/* Header Superior */}
-          <header className="flex flex-wrap justify-between items-center gap-6 mb-10">
+          <header className="flex flex-wrap justify-between items-center gap-4 mb-8 md:mb-10">
+            <div className="flex items-center gap-3">
+              {/* Botão hamburger — só no mobile */}
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="md:hidden p-2.5 rounded-xl bg-white dark:bg-slate-800 shadow-sm border dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:scale-110 transition-all"
+                aria-label="Abrir menu"
+              >
+                <Menu size={20} />
+              </button>
             <div>
               <h2 className="text-4xl font-black tracking-tighter leading-none font-display">
                 <span className="text-gradient-vibe">
@@ -1827,6 +1849,7 @@ export const AdminDashboard: React.FC = () => {
                  )}
               </div>
             </div>
+            </div>{/* fecha flex items-center gap-3 (hamburger + título) */}
 
             <div className="flex flex-wrap items-center gap-4">
                 {['students', 'submissions', 'evaluations', 'question_bank', 'lessons_list'].includes(activeTab) && (
