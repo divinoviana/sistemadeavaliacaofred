@@ -19,22 +19,30 @@ interface Props {
   submissionDate: string;
   lessonId: string;
   lessonTitle: string;
-  subject: Subject; 
+  subject: Subject;
   submissionData: SubmissionItem[];
   aiData?: AIResponse | null;
   theory: string;
+  integrityData?: {
+    tab_switches: number;
+    paste_attempts: number;
+    extension_detected: boolean;
+    programmatic_inputs: number;
+    suspicion_level: string;
+  } | null;
 }
 
-export const SubmissionBar: React.FC<Props> = ({ 
-  studentName, 
-  schoolClass, 
+export const SubmissionBar: React.FC<Props> = ({
+  studentName,
+  schoolClass,
   submissionDate,
   lessonId,
-  lessonTitle, 
+  lessonTitle,
   subject,
   submissionData,
   aiData,
-  theory
+  theory,
+  integrityData,
 }) => {
   const { student } = useAuth();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -84,7 +92,7 @@ export const SubmissionBar: React.FC<Props> = ({
         submission_date: nowIso,
         submitted_at: nowIso,
         content: submissionData,
-        ai_feedback: currentAIData,
+        ai_feedback: integrityData ? { ...currentAIData, integrity: integrityData } : currentAIData,
         score: isNaN(avgScore) ? 0 : avgScore,
         status: 'completed',
         teacher_feedback: null,

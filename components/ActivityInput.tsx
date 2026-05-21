@@ -5,9 +5,12 @@ interface Props {
   questionText: string;
   value: string;
   onChange: (val: string) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onInput?: (e: React.FormEvent<HTMLTextAreaElement>) => void;
+  onPasteBlocked?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
-export const ActivityInput: React.FC<Props> = ({ questionId, questionText, value, onChange }) => {
+export const ActivityInput: React.FC<Props> = ({ questionId, questionText, value, onChange, onKeyDown, onInput, onPasteBlocked }) => {
   const [warning, setWarning] = useState<string | null>(null);
 
   // Limpa o aviso automaticamente após 3 segundos
@@ -59,7 +62,9 @@ export const ActivityInput: React.FC<Props> = ({ questionId, questionText, value
           placeholder="Digite sua resposta aqui..."
           value={value}
           onChange={handleChange}
-          onPaste={handleBlockAction}
+          onKeyDown={onKeyDown}
+          onInput={onInput}
+          onPaste={(e) => { handleBlockAction(e); onPasteBlocked?.(e); }}
           onCopy={handleBlockAction}
           onCut={handleBlockAction}
           onDragStart={handleBlockAction}
