@@ -7,6 +7,7 @@ import { subjectsInfo } from '../data';
 import { Subject } from '../types';
 import { ArrowLeft, BrainCircuit, CheckCircle2, Clock, Send, Loader2, Award, Info, Lock, AlertTriangle, Pencil, ShieldAlert } from 'lucide-react';
 import { VisualActivityRenderer } from '../components/VisualActivityRenderer';
+import { useIntegrityMonitor, SuspicionBadge } from '../lib/useIntegrityMonitor';
 
 export const EvaluationView: React.FC = () => {
   const { examId } = useParams<{ examId: string }>();
@@ -20,9 +21,10 @@ export const EvaluationView: React.FC = () => {
   const [score, setScore] = useState(0);
   const [alreadyDone, setAlreadyDone] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(true);
-  // Segurança das redações: contar saídas de aba/janela
-  const [tabSwitches, setTabSwitches] = useState(0);
-  const [pasteAttempts, setPasteAttempts] = useState(0);
+  const {
+    tabSwitches, pasteAttempts, extensionDetected, programmaticInputs,
+    suspicionLevel, handleKeyDown, handlePaste, handleInput, getIntegrityData,
+  } = useIntegrityMonitor(!isFinished && !checkingStatus && !!exam);
   // Resultado da correção IA da redação (5 competências ENEM)
   const [essayCorrection, setEssayCorrection] = useState<any | null>(null);
   // Loading específico para mostrar "Corrigindo redação…" durante a chamada IA
@@ -36,21 +38,6 @@ export const EvaluationView: React.FC = () => {
       checkAttemptAndFetchExam();
     }
   }, [examId, student, isAuthLoading]);
-
-  // Monitor de integridade: conta saídas da aba/janela enquanto a
-  // avaliação está aberta e o aluno ainda não enviou. Vale tanto para
-  // REDAÇÃO quanto para SIMULADO — sair da tela durante a prova é o
-  // principal sinal de uso de IA / consulta externa.
-  useEffect(() => {
-    if (isFinished || checkingStatus || !exam) return;
-    const onVis = () => {
-      if (document.visibilityState === 'hidden') {
-        setTabSwitches(n => n + 1);
-      }
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, [isFinished, checkingStatus, exam]);
 
   const checkAttemptAndFetchExam = async () => {
     if (!examId || !student) return;
@@ -148,6 +135,7 @@ export const EvaluationView: React.FC = () => {
       setScore(finalScore);
       setEssayCorrection(enemEval || null);
 
+      const integrityData = getIntegrityData();
       const generalComment = enemEval
         ? `${enemEval.generalComment} (Total: ${enemEval.totalScore}/1000)` +
           ` · Aluno saiu da tela ${tabSwitches}× e tentou colar ${pasteAttempts}×.`
@@ -176,8 +164,7 @@ export const EvaluationView: React.FC = () => {
           generalComment,
           corrections: [],
           enem: enemEval || null,
-          // Monitor de integridade — lido pelo painel do professor
-          integrity: { tab_switches: tabSwitches, paste_attempts: pasteAttempts },
+          integrity: integrityData,
         },
         teacher_feedback: null,
         submitted_at: nowIso,
@@ -306,10 +293,11 @@ export const EvaluationView: React.FC = () => {
     finalScore = Math.round(finalScore * 10) / 10; // 1 casa decimal
     setScore(finalScore);
 
+    const integrityData = getIntegrityData();
     const baseComment = aiGeneralComment ||
       `Simulado finalizado. Objetivas: ${objectiveCorrect}/${objectiveQs.length} acertos. Discursivas: nota média ${discursiveScoreAvg.toFixed(1)}.`;
-    const integrityNote = (tabSwitches > 0 || pasteAttempts > 0)
-      ? ` ⚠️ Integridade: aluno saiu da tela ${tabSwitches}× e tentou colar ${pasteAttempts}×.`
+    const integrityNote = (tabSwitches > 0 || pasteAttempts > 0 || extensionDetected || programmaticInputs > 0)
+      ? ` ⚠️ Integridade: ${tabSwitches} saída(s) de tela, ${pasteAttempts} tentativa(s) de colar${extensionDetected ? ', extensão detectada' : ''}${programmaticInputs > 0 ? `, ${programmaticInputs} inserção(ões) programática(s)` : ''}.`
       : '';
     const generalComment = baseComment + integrityNote;
 
@@ -333,8 +321,7 @@ export const EvaluationView: React.FC = () => {
         ai_feedback: {
           generalComment,
           corrections: correctionDetails,
-          // Monitor de integridade — lido pelo painel do professor
-          integrity: { tab_switches: tabSwitches, paste_attempts: pasteAttempts },
+          integrity: integrityData,
         },
         teacher_feedback: null,
         submitted_at: nowIso,
@@ -427,7 +414,7 @@ export const EvaluationView: React.FC = () => {
                       {String(answers[1] || '').length} caracteres · {String(answers[1] || '').split(/\s+/).filter(Boolean).length} palavras
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {tabSwitches > 0 && (
                       <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
                         <AlertTriangle size={11}/> {tabSwitches} saída{tabSwitches > 1 ? 's' : ''} de tela
@@ -438,6 +425,7 @@ export const EvaluationView: React.FC = () => {
                         🚫 {pasteAttempts} tentativa{pasteAttempts > 1 ? 's' : ''} de colar
                       </span>
                     )}
+                    <SuspicionBadge level={suspicionLevel} />
                   </div>
                 </div>
 
@@ -445,11 +433,9 @@ export const EvaluationView: React.FC = () => {
                 <textarea
                   value={String(answers[1] || '')}
                   onChange={e => setAnswers(prev => ({ ...prev, 1: e.target.value }))}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    setPasteAttempts(n => n + 1);
-                    alert('🚫 Não é permitido colar texto na redação. Digite o seu próprio texto.');
-                  }}
+                  onKeyDown={handleKeyDown}
+                  onInput={handleInput}
+                  onPaste={(e) => { handlePaste(e); alert('🚫 Não é permitido colar texto na redação. Digite o seu próprio texto.'); }}
                   onDrop={(e) => { e.preventDefault(); }}
                   onContextMenu={(e) => e.preventDefault()}
                   placeholder="Escreva aqui sua redação… (mínimo 200 caracteres)"
@@ -484,7 +470,7 @@ export const EvaluationView: React.FC = () => {
                  </div>
               </div>
 
-              {(tabSwitches > 0 || pasteAttempts > 0) && (
+              {(tabSwitches > 0 || pasteAttempts > 0 || extensionDetected || programmaticInputs > 0) && (
                 <div className="flex flex-wrap items-center gap-2 -mt-4 px-2">
                   {tabSwitches > 0 && (
                     <span className="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
@@ -496,6 +482,7 @@ export const EvaluationView: React.FC = () => {
                       🚫 {pasteAttempts} tentativa{pasteAttempts > 1 ? 's' : ''} de colar
                     </span>
                   )}
+                  <SuspicionBadge level={suspicionLevel} />
                 </div>
               )}
 
@@ -547,11 +534,9 @@ export const EvaluationView: React.FC = () => {
                            <textarea
                              value={String(answers[q.id] || '')}
                              onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
-                             onPaste={(e) => {
-                               e.preventDefault();
-                               setPasteAttempts(n => n + 1);
-                               alert('🚫 Não é permitido colar texto. Digite a sua própria resposta.');
-                             }}
+                             onKeyDown={handleKeyDown}
+                             onInput={handleInput}
+                             onPaste={(e) => { handlePaste(e); alert('🚫 Não é permitido colar texto. Digite a sua própria resposta.'); }}
                              onDrop={(e) => e.preventDefault()}
                              onContextMenu={(e) => e.preventDefault()}
                              placeholder="Digite sua resposta argumentativa aqui (mínimo 30 caracteres)..."

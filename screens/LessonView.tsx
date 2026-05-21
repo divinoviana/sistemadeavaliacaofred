@@ -12,6 +12,7 @@ import { VisualActivityRenderer } from '../components/VisualActivityRenderer';
 import { exportToPDF } from '../lib/pdfUtils';
 import { supabase } from '../lib/supabase';
 import { Download } from 'lucide-react';
+import { useIntegrityMonitor, SuspicionBadge } from '../lib/useIntegrityMonitor';
 
 export const LessonView: React.FC = () => {
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -26,6 +27,10 @@ export const LessonView: React.FC = () => {
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiData, setAiData] = useState<AIResponse | null>(null);
+
+  const {
+    suspicionLevel, handleKeyDown, handlePaste, handleInput, getIntegrityData,
+  } = useIntegrityMonitor(!!student && !!lessonId);
 
   useEffect(() => {
     if (!isLoading && !student) {
@@ -369,17 +374,21 @@ export const LessonView: React.FC = () => {
                 {/* QUESTÕES DISCURSIVAS */}
                 {lessonActivity.discursives && lessonActivity.discursives.length > 0 && (
                   <div className="space-y-8">
-                    <div className="flex items-center gap-2 mb-4">
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
                         <HelpCircle className="text-amber-500" size={20}/>
                         <h4 className="font-black text-slate-400 uppercase text-[10px] tracking-widest">Parte 2: Questões Discursivas</h4>
+                        <SuspicionBadge level={suspicionLevel} />
                     </div>
                     {lessonActivity.discursives.map((q, idx) => (
                       <div key={q.id} className="bg-white dark:bg-slate-900 p-8 rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-sm">
-                          <ActivityInput 
-                            questionId={q.id!} 
-                            questionText={`${(lessonActivity.objectives?.length || 0) + idx + 1}. ${q.question}`} 
-                            value={answers[`disc-${q.id}`] || ''} 
-                            onChange={(val) => handleDiscursiveChange(q.id!, val)} 
+                          <ActivityInput
+                            questionId={q.id!}
+                            questionText={`${(lessonActivity.objectives?.length || 0) + idx + 1}. ${q.question}`}
+                            value={answers[`disc-${q.id}`] || ''}
+                            onChange={(val) => handleDiscursiveChange(q.id!, val)}
+                            onKeyDown={handleKeyDown}
+                            onInput={handleInput}
+                            onPasteBlocked={handlePaste}
                           />
                       </div>
                     ))}
@@ -418,16 +427,17 @@ export const LessonView: React.FC = () => {
       </div>
 
       {student && (
-        <SubmissionBar 
-          studentName={student.name} 
-          schoolClass={student.school_class} 
-          submissionDate={getTodayString()} 
+        <SubmissionBar
+          studentName={student.name}
+          schoolClass={student.school_class}
+          submissionDate={getTodayString()}
           lessonId={lessonId!}
-          lessonTitle={displayTitle} 
-          subject={foundLesson.subject} 
-          submissionData={getSubmissionData()} 
-          aiData={aiData} 
-          theory={displayTheory || ''} 
+          lessonTitle={displayTitle}
+          subject={foundLesson.subject}
+          submissionData={getSubmissionData()}
+          aiData={aiData}
+          theory={displayTheory || ''}
+          integrityData={getIntegrityData()}
         />
       )}
     </div>
