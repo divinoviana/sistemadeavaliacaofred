@@ -306,6 +306,10 @@ export const AdminDashboard: React.FC = () => {
   const [isGeneratingExam, setIsGeneratingExam] = useState(false);
   const [isPublishingExam, setIsPublishingExam] = useState(false);
   const [publishedExams, setPublishedExams] = useState<any[]>([]);
+  const [editingPublishedExam, setEditingPublishedExam] = useState<any | null>(null);
+  const [editExamTitle, setEditExamTitle] = useState('');
+  const [editExamQuestions, setEditExamQuestions] = useState<any[]>([]);
+  const [isSavingEditedExam, setIsSavingEditedExam] = useState(false);
 
   // ── Frequência (Geolocalização) ────────────────
   const [schoolLocation, setSchoolLocation] = useState<any | null>(null);
@@ -1367,6 +1371,31 @@ export const AdminDashboard: React.FC = () => {
       fetchPublishedExams();
     } catch (e: any) {
       alert('Erro ao excluir: ' + e.message);
+    }
+  };
+
+  const openEditPublishedExam = (exam: any) => {
+    setEditingPublishedExam(exam);
+    setEditExamTitle(exam.title || '');
+    setEditExamQuestions(JSON.parse(JSON.stringify(exam.questions || [])));
+  };
+
+  const handleSaveEditedExam = async () => {
+    if (!editingPublishedExam) return;
+    setIsSavingEditedExam(true);
+    try {
+      const { error } = await supabase
+        .from('bimonthly_exams')
+        .update({ title: editExamTitle.trim(), questions: editExamQuestions })
+        .eq('id', editingPublishedExam.id);
+      if (error) throw error;
+      setEditingPublishedExam(null);
+      fetchPublishedExams();
+      alert('Simulado atualizado com sucesso!');
+    } catch (e: any) {
+      alert('Erro ao salvar: ' + e.message);
+    } finally {
+      setIsSavingEditedExam(false);
     }
   };
 
@@ -2927,13 +2956,22 @@ export const AdminDashboard: React.FC = () => {
                             </p>
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleDeletePublishedExam(exam.id)}
-                          className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                          title="Excluir simulado"
-                        >
-                          <Trash2 size={16}/>
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => openEditPublishedExam(exam)}
+                            className="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all"
+                            title="Editar simulado"
+                          >
+                            <Pencil size={16}/>
+                          </button>
+                          <button
+                            onClick={() => handleDeletePublishedExam(exam.id)}
+                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                            title="Excluir simulado"
+                          >
+                            <Trash2 size={16}/>
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -4082,6 +4120,155 @@ export const AdminDashboard: React.FC = () => {
       )}
       </main>
     </div>
+
+    {/* Modal: Editar Simulado Publicado */}
+    {editingPublishedExam && (
+      <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setEditingPublishedExam(null)}>
+        <div className="bg-white dark:bg-slate-900 rounded-[32px] shadow-2xl border dark:border-slate-800 w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          {/* Cabeçalho */}
+          <div className="flex items-center justify-between px-8 pt-7 pb-4 border-b dark:border-slate-800 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-vibe rounded-xl flex items-center justify-center text-white">
+                <Pencil size={18}/>
+              </div>
+              <div>
+                <h2 className="font-black text-slate-800 dark:text-white text-base tracking-tight">Editar Simulado</h2>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {editExamQuestions.length} questões · {editingPublishedExam.bimester}º Bimestre
+                </p>
+              </div>
+            </div>
+            <button onClick={() => setEditingPublishedExam(null)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
+              <X size={18}/>
+            </button>
+          </div>
+
+          {/* Corpo rolável */}
+          <div className="overflow-y-auto flex-1 px-8 py-6 space-y-6">
+            {/* Título */}
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Título do Simulado</label>
+              <input
+                type="text"
+                value={editExamTitle}
+                onChange={e => setEditExamTitle(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-vibe-purple"
+              />
+            </div>
+
+            {/* Questões */}
+            {editExamQuestions.map((q: any, qi: number) => (
+              <div key={qi} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-7 h-7 bg-slate-800 dark:bg-slate-950 text-white rounded-lg flex items-center justify-center font-black text-xs">{qi + 1}</span>
+                  <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${q.type === 'discursive' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                    {q.type === 'discursive' ? 'Discursiva' : 'Objetiva'}
+                  </span>
+                </div>
+
+                {/* Texto do fragmento (se houver) */}
+                {q.textFragment !== undefined && (
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Texto de apoio (opcional)</label>
+                    <textarea
+                      rows={2}
+                      value={q.textFragment || ''}
+                      onChange={e => {
+                        const updated = [...editExamQuestions];
+                        updated[qi] = { ...updated[qi], textFragment: e.target.value };
+                        setEditExamQuestions(updated);
+                      }}
+                      className="w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-vibe-purple resize-none"
+                    />
+                  </div>
+                )}
+
+                {/* Enunciado */}
+                <div>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Enunciado</label>
+                  <textarea
+                    rows={3}
+                    value={q.questionText || ''}
+                    onChange={e => {
+                      const updated = [...editExamQuestions];
+                      updated[qi] = { ...updated[qi], questionText: e.target.value };
+                      setEditExamQuestions(updated);
+                    }}
+                    className="w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-vibe-purple resize-none"
+                  />
+                </div>
+
+                {/* Alternativas (só para objetivas) */}
+                {q.type !== 'discursive' && q.options && (
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Alternativas · clique em ✓ para marcar a correta</label>
+                    {(['a','b','c','d','e'] as const).map(opt => (
+                      q.options[opt] !== undefined ? (
+                        <div key={opt} className={`flex items-center gap-2 p-2 rounded-xl border-2 transition-all ${q.correctOption === opt ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                          <button
+                            onClick={() => {
+                              const updated = [...editExamQuestions];
+                              updated[qi] = { ...updated[qi], correctOption: opt };
+                              setEditExamQuestions(updated);
+                            }}
+                            className={`w-7 h-7 rounded-lg font-black text-xs shrink-0 flex items-center justify-center transition-all ${q.correctOption === opt ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 hover:bg-emerald-100'}`}
+                            title="Marcar como correta"
+                          >
+                            {q.correctOption === opt ? '✓' : opt.toUpperCase()}
+                          </button>
+                          <input
+                            type="text"
+                            value={q.options[opt]}
+                            onChange={e => {
+                              const updated = [...editExamQuestions];
+                              updated[qi] = { ...updated[qi], options: { ...updated[qi].options, [opt]: e.target.value } };
+                              setEditExamQuestions(updated);
+                            }}
+                            className="flex-1 bg-transparent text-sm text-slate-700 dark:text-slate-200 outline-none"
+                          />
+                        </div>
+                      ) : null
+                    ))}
+                  </div>
+                )}
+
+                {/* Explicação */}
+                {q.explanation !== undefined && (
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Explicação / gabarito comentado (opcional)</label>
+                    <textarea
+                      rows={2}
+                      value={q.explanation || ''}
+                      onChange={e => {
+                        const updated = [...editExamQuestions];
+                        updated[qi] = { ...updated[qi], explanation: e.target.value };
+                        setEditExamQuestions(updated);
+                      }}
+                      className="w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-vibe-purple resize-none"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Rodapé */}
+          <div className="px-8 py-5 border-t dark:border-slate-800 flex justify-end gap-3 shrink-0">
+            <button onClick={() => setEditingPublishedExam(null)} className="px-5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-black text-sm hover:scale-105 transition-all">
+              Cancelar
+            </button>
+            <button
+              onClick={handleSaveEditedExam}
+              disabled={isSavingEditedExam}
+              className="px-6 py-2.5 rounded-2xl bg-gradient-vibe text-white font-black text-sm shadow-glow-purple hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              {isSavingEditedExam ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
+              Salvar Alterações
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* Modal: Redefinir Senha (super admin) */}
     {resetPasswordStudent && (
