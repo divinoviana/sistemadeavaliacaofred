@@ -308,22 +308,36 @@ export const Home: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  {pendingExams.map(exam => {
                    const isEssayItem = exam.type === 'essay' || exam.questions?.[0]?.type === 'essay';
+                   const subjInfo = !isEssayItem ? subjectsInfo[exam.subject as Subject] : null;
                    return (
                     <Link
                       key={exam.id}
                       to={`/evaluation/${exam.id}`}
-                      className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-amber-100 dark:border-amber-900 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-lg transition-all group flex items-center justify-between"
+                      className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-amber-100 dark:border-amber-900 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-lg transition-all group flex items-center justify-between gap-3"
                     >
                        <div className="flex items-center gap-4 min-w-0">
-                          <div className={`w-10 h-10 ${isEssayItem ? 'bg-gradient-fire' : subjectsInfo[exam.subject as Subject].color} rounded-xl flex items-center justify-center text-white text-xl shrink-0`}>
-                             {isEssayItem ? '✍️' : subjectsInfo[exam.subject as Subject].icon}
+                          <div className={`w-12 h-12 ${isEssayItem ? 'bg-gradient-fire' : subjInfo?.color} rounded-xl flex items-center justify-center text-white text-2xl shrink-0 group-hover:scale-110 transition-transform`}>
+                             {isEssayItem ? '✍️' : subjInfo?.icon}
                           </div>
                           <div className="min-w-0">
-                             <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
-                               {isEssayItem ? `Redação: ${exam.title || 'Sem título'}` : (exam.title || `Simulado ${subjectsInfo[exam.subject as Subject]?.name || ''}`)}
+                             {/* Badge da disciplina */}
+                             {!isEssayItem && subjInfo && (
+                               <span className={`inline-flex items-center gap-1 ${subjInfo.color} text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full mb-1`}>
+                                 {subjInfo.icon} {subjInfo.name}
+                               </span>
+                             )}
+                             {isEssayItem && (
+                               <span className="inline-flex items-center gap-1 bg-gradient-fire text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full mb-1">
+                                 ✍️ Redação
+                               </span>
+                             )}
+                             <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">
+                               {isEssayItem
+                                 ? (exam.title || 'Redação')
+                                 : (exam.title || `Simulado ${subjInfo?.name || ''} — ${exam.bimester}º Bimestre`)}
                              </h4>
-                             <p className="text-[10px] font-black text-slate-400 uppercase">
-                               {isEssayItem ? '✍️ Redação · ' : '🎯 Simulado · '}{exam.bimester}º Bimestre · {exam.school_class || 'Todas turmas'}
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                               {exam.bimester}º Bimestre · {exam.school_class || 'Todas turmas'}
                              </p>
                           </div>
                        </div>
