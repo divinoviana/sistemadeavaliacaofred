@@ -1,4 +1,13 @@
-export type Subject = 'filosofia' | 'geografia' | 'historia' | 'sociologia';
+// Ciências Humanas e Sociais Aplicadas
+export type SubjectHumanas = 'filosofia' | 'geografia' | 'historia' | 'sociologia';
+// Ciências da Natureza e suas Tecnologias
+export type SubjectNatureza = 'quimica' | 'fisica' | 'biologia';
+// Linguagens, Códigos e suas Tecnologias
+export type SubjectLinguagens = 'portugues' | 'redacao' | 'ingles' | 'artes' | 'educacao_fisica';
+// Matemática e suas Tecnologias
+export type SubjectMatematica = 'matematica';
+
+export type Subject = SubjectHumanas | SubjectNatureza | SubjectLinguagens | SubjectMatematica;
 
 export interface ChartData {
   type: 'bar' | 'line' | 'pie';

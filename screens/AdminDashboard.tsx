@@ -1943,7 +1943,7 @@ export const AdminDashboard: React.FC = () => {
                 .map((gradeData, gIdx) => {
                   // Pra cada série, conta totais (aulas, com teoria, com atividade) — só na matéria do prof
                   const allowedSubjects: Subject[] = (isSuper
-                    ? (['historia','geografia','sociologia','filosofia'] as Subject[])
+                    ? (['historia','geografia','sociologia','filosofia','quimica','fisica','biologia','portugues','redacao','ingles','artes','educacao_fisica','matematica'] as Subject[])
                     : (teacherSubject ? [teacherSubject as Subject] : []));
                   const totalLessonsGrade = gradeData.bimesters.flatMap(b =>
                     b.lessons.filter(l => allowedSubjects.includes(l.subject as Subject))
