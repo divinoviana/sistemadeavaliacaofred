@@ -209,7 +209,14 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
         role: 'student' as const,
       };
 
-      const { error } = await supabase.from('students').upsert(studentData, { onConflict: 'id' });
+      const { error } = await supabase.rpc('register_student', {
+        p_id:          studentData.id,
+        p_name:        studentData.name,
+        p_email:       studentData.email,
+        p_grade:       studentData.grade,
+        p_school_class: studentData.school_class,
+        p_photo_url:   studentData.photo_url,
+      });
       if (error) throw error;
 
       loginStudent(studentData);
@@ -253,7 +260,14 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
           photo_url: photo,
           role: 'student' as const,
         };
-        const { error: insertErr } = await supabase.from('students').upsert(studentData, { onConflict: 'id' });
+        const { error: insertErr } = await supabase.rpc('register_student', {
+          p_id:          studentData.id,
+          p_name:        studentData.name,
+          p_email:       studentData.email,
+          p_grade:       studentData.grade,
+          p_school_class: studentData.school_class,
+          p_photo_url:   studentData.photo_url,
+        });
         if (insertErr) throw insertErr;
 
         loginStudent(studentData);
