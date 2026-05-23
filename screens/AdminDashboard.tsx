@@ -44,17 +44,17 @@ function flushPhotoQueue() {
   for (let i = 0; i < ids.length; i += chunkSize) {
     const chunk = ids.slice(i, i + chunkSize);
     supabase
-      .from('students')
-      .select('id,photo_url')
-      .in('id', chunk)
+      .from('student_photos')
+      .select('student_id,photo_url')
+      .in('student_id', chunk)
       .then(({ data }) => {
         const found = new Set<string>();
         (data || []).forEach((row: any) => {
-          found.add(row.id);
-          photoCache.set(row.id, row.photo_url || null);
-          const subs = photoSubscribers.get(row.id) || [];
+          found.add(row.student_id);
+          photoCache.set(row.student_id, row.photo_url || null);
+          const subs = photoSubscribers.get(row.student_id) || [];
           subs.forEach(cb => cb(row.photo_url || null));
-          photoSubscribers.delete(row.id);
+          photoSubscribers.delete(row.student_id);
         });
         // IDs do batch que não voltaram → marca como sem foto
         chunk.forEach(id => {

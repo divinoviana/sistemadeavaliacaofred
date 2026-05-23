@@ -37,11 +37,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (data) {
           setStudent(data);
-          // Foto em background — não bloqueia a navegação
+          // Foto em background — carrega da tabela dedicada student_photos
           supabase
-            .from('students')
+            .from('student_photos')
             .select('photo_url')
-            .eq('id', userId)
+            .eq('student_id', userId)
             .maybeSingle()
             .then(({ data: ph }) => {
               if (mounted && ph?.photo_url) {
