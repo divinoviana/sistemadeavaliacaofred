@@ -1027,6 +1027,75 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleDownloadAttendancePDF = async (classKey: string, records: any[]) => {
+    const { default: jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    const dateLabel = new Date(`${attendanceFilterDate}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const sorted = [...records].sort((a, b) => (a.student_name || '').localeCompare(b.student_name || '', 'pt-BR'));
+
+    // Cabeçalho
+    doc.setFillColor(0, 80, 160);
+    doc.rect(0, 0, 210, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Colégio Estadual Frederico Pedreira Neto', 105, 11, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Lista de Frequência — Área do Professor', 105, 18, { align: 'center' });
+    doc.text(`Turma ${classKey} · ${dateLabel}`, 105, 24, { align: 'center' });
+
+    doc.setTextColor(0, 0, 0);
+
+    // Resumo
+    const presentCount = sorted.filter(r => r.status === 'present').length;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total: ${sorted.length} aluno(s) · Presentes: ${presentCount} · Ausentes: ${sorted.length - presentCount}`, 14, 36);
+
+    // Cabeçalho da tabela
+    let y = 44;
+    doc.setFillColor(240, 240, 250);
+    doc.rect(14, y - 5, 182, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('#', 16, y);
+    doc.text('Nome do Aluno', 24, y);
+    doc.text('Status', 128, y);
+    doc.text('Distância', 152, y);
+    doc.text('Horário', 176, y);
+
+    // Linhas
+    doc.setFont('helvetica', 'normal');
+    sorted.forEach((r, i) => {
+      y += 8;
+      if (y > 280) { doc.addPage(); y = 20; }
+      if (i % 2 === 0) { doc.setFillColor(249, 249, 255); doc.rect(14, y - 5, 182, 8, 'F'); }
+      const time = new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const dist = r.distance_meters != null ? `${Math.round(r.distance_meters)} m` : '—';
+      const status = r.status === 'present' ? 'Presente' : (r.status || 'Ausente');
+      doc.setTextColor(0, 0, 0);
+      doc.text(String(i + 1), 16, y);
+      const name = doc.splitTextToSize(r.student_name || '—', 100);
+      doc.text(name[0], 24, y);
+      if (r.status === 'present') doc.setTextColor(0, 140, 60);
+      else doc.setTextColor(200, 80, 0);
+      doc.text(status, 128, y);
+      doc.setTextColor(0, 0, 0);
+      doc.text(dist, 152, y);
+      doc.text(time, 176, y);
+    });
+
+    // Rodapé
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} · Portal CHSA`, 105, 292, { align: 'center' });
+
+    const safeName = classKey.replace(/[^a-zA-Z0-9]/g, '_');
+    doc.save(`frequencia_${safeName}_${attendanceFilterDate}.pdf`);
+  };
+
   const handleCaptureCurrentLocation = async () => {
     setIsCapturingLoc(true);
     try {
@@ -3233,7 +3302,7 @@ export const AdminDashboard: React.FC = () => {
                         {attendanceRecords.length} {attendanceRecords.length === 1 ? 'marcação' : 'marcações'} · {presentCount} presentes · {classKeys.length} turmas
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <input
                         type="date"
                         value={attendanceFilterDate}
@@ -3247,6 +3316,15 @@ export const AdminDashboard: React.FC = () => {
                       >
                         <RotateCw size={16}/>
                       </button>
+                      {attendanceRecords.length > 0 && (
+                        <button
+                          onClick={() => classKeys.forEach(k => handleDownloadAttendancePDF(k, byClass[k].sort((a: any, b: any) => (a.student_name||'').localeCompare(b.student_name||'','pt-BR'))))}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-tocantins-blue to-vibe-cyan text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 shadow transition-all"
+                          title="Baixar PDF de todas as turmas"
+                        >
+                          <Download size={13}/> Baixar Todas
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -3276,7 +3354,16 @@ export const AdminDashboard: React.FC = () => {
                                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{list.length} presença{list.length > 1 ? 's' : ''}</p>
                                 </div>
                               </div>
-                              <ChevronRight size={18} className="text-slate-300 dark:text-slate-700 group-open:rotate-90 transition-transform"/>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={e => { e.preventDefault(); handleDownloadAttendancePDF(cls, list); }}
+                                  className="p-2 bg-tocantins-blue hover:bg-blue-700 text-white rounded-xl shadow-sm hover:scale-110 transition-all"
+                                  title={`Baixar PDF — Turma ${cls}`}
+                                >
+                                  <Download size={14}/>
+                                </button>
+                                <ChevronRight size={18} className="text-slate-300 dark:text-slate-700 group-open:rotate-90 transition-transform"/>
+                              </div>
                             </summary>
                             <div className="border-t dark:border-slate-800 divide-y dark:divide-slate-800">
                               {list.map((r: any) => {
