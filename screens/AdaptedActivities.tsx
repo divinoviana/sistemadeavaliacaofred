@@ -13,7 +13,6 @@ import {
   Search, Filter, Sun, Moon, ChevronLeft, Sparkles, Loader2,
   FileText, Printer, RotateCw, Download, BookOpen, Heart,
   AlertTriangle, Target, Lightbulb, History as HistoryIcon, Trash2,
-  FolderOpen, ExternalLink,
 } from 'lucide-react';
 import {
   NEURO_STUDENTS, NeuroStudent, avatarUrl, allDiagnoses,
@@ -152,33 +151,6 @@ const Gallery: React.FC<{ onPick: (s: NeuroStudent) => void }> = ({ onPick }) =>
 
   return (
     <div>
-      {/* Banco complementar — pasta OneDrive com atividades adaptadas
-          já elaboradas pela equipe pedagógica. Recurso EXTERNO, abre em nova aba. */}
-      <a
-        href="https://1drv.ms/f/c/cffbbe2bc8efe469/IgDj6Y342XFRTr2a1mJmbQcCAYSt8HScvkEpDv77Gt2w8WQ?e=BVBgTu"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="group block bg-gradient-to-br from-vibe-cyan/10 via-vibe-blue/10 to-vibe-purple/10 dark:from-vibe-cyan/5 dark:via-vibe-blue/5 dark:to-vibe-purple/10 hover:from-vibe-cyan/20 hover:via-vibe-blue/15 hover:to-vibe-purple/20 border-2 border-vibe-blue/30 dark:border-vibe-blue/40 rounded-3xl p-5 mb-6 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
-      >
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-vibe-cyan to-vibe-blue text-white flex items-center justify-center shrink-0 shadow-glow-cyan group-hover:scale-110 group-hover:rotate-6 transition-transform">
-            <FolderOpen className="w-6 h-6" strokeWidth={2.2} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] uppercase tracking-widest font-black text-vibe-blue mb-1">
-              Banco complementar · OneDrive
-            </p>
-            <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-tight">
-              Atividades adaptadas já elaboradas pela equipe pedagógica
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
-              Pasta com modelos, atividades prontas e materiais de referência da escola.
-            </p>
-          </div>
-          <ExternalLink className="w-5 h-5 text-vibe-blue shrink-0 mt-1 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-        </div>
-      </a>
-
       {/* Filtros */}
       <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-2 border-slate-200/70 dark:border-slate-800 rounded-3xl p-4 sm:p-5 mb-6 shadow-lg">
         <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
