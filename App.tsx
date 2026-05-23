@@ -149,12 +149,12 @@ function AppContent() {
                 <span className="text-white text-sm font-mono tracking-wide">+55 (63) 99919-1919</span>
                 <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Prof. Divino Viana</span>
               </div>
-              <div className="flex flex-col md:items-end gap-2">
-                <Link to="/atividades-adaptadas" className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-vibe rounded-xl text-white text-xs font-bold shadow-glow-purple hover:scale-105 transition">
+              <div className="flex flex-col md:items-end gap-3">
+                <Link to="/atividades-adaptadas" className="inline-flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-vibe-pink via-vibe-purple to-vibe-blue rounded-2xl text-white text-sm font-black shadow-glow-purple hover:scale-105 hover:shadow-xl transition-all border border-white/20">
                   ✨ Atividades Adaptadas (PEIs)
                 </Link>
-                <Link to="/admin" className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-xl text-white/60 hover:text-white transition-colors text-xs">
-                  <Lock className="w-3 h-3" /> Painel Admin
+                <Link to="/admin" className="inline-flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-tocantins-blue to-vibe-cyan rounded-2xl text-white text-sm font-black shadow-lg hover:scale-105 hover:shadow-xl transition-all border border-white/20">
+                  <Lock className="w-4 h-4" /> Área do Professor
                 </Link>
               </div>
             </div>

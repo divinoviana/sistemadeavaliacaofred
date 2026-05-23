@@ -498,8 +498,8 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
               </button>
               
               {!isRegistering && (
-                <button onClick={() => setIsAdminLogin(true)} className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow opacity-60 hover:opacity-100 uppercase tracking-widest transition-colors cursor-pointer flex items-center justify-center gap-2">
-                  <Lock size={12} /> ÁREA DO PROFESSOR
+                <button onClick={() => setIsAdminLogin(true)} className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-tocantins-blue to-vibe-cyan rounded-2xl text-white text-sm font-black shadow-lg hover:scale-105 hover:shadow-xl transition-all w-full border border-white/10">
+                  <Lock size={15} /> Área do Professor
                 </button>
               )}
             </div>
