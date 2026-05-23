@@ -74,7 +74,7 @@ export const Login: React.FC<{ adminMode?: boolean }> = ({ adminMode = false }) 
 
     try {
       // Super admin
-      if ((adminData.email === 'admin@admin.com' || adminData.email === 'divinoviana@gmail.com') && adminData.password === 'admin123') {
+      if ((adminData.email === 'admin@admin.com' || adminData.email === 'divinoviana@gmail.com') && adminData.password === 'fred@fred2026') {
         const { error } = await supabase.auth.signInWithPassword({
           email: adminData.email,
           password: adminData.password,
