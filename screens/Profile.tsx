@@ -117,10 +117,23 @@ export const Profile: React.FC = () => {
     if (!newPhoto || !student) return;
     setLoading(true);
     try {
-      // Salva foto na tabela dedicada student_photos (upsert por student_id)
+      // 1) Garantir que o aluno existe em students (FK obrigatório para student_photos)
+      await supabase.rpc('register_student', {
+        p_id:          student.id,
+        p_name:        student.name || 'Aluno',
+        p_email:       student.email || '',
+        p_grade:       student.grade || 'N/A',
+        p_school_class: student.school_class || 'N/A',
+        p_photo_url:   null,
+      });
+
+      // 2) Salvar foto na tabela dedicada student_photos
       const { error } = await supabase
         .from('student_photos')
-        .upsert({ student_id: student.id, photo_url: newPhoto, updated_at: new Date().toISOString() }, { onConflict: 'student_id' });
+        .upsert(
+          { student_id: student.id, photo_url: newPhoto, updated_at: new Date().toISOString() },
+          { onConflict: 'student_id' }
+        );
       if (error) throw error;
 
       updateStudentData({ photo_url: newPhoto });
