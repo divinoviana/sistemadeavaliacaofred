@@ -147,10 +147,11 @@ export const EvaluationView: React.FC = () => {
 
       // Checa por submissão prévia: tenta pelo lesson_id do exame (mais confiável);
       // se nada, fallback pelo título.
+      // Seleciona status também para restaurar tela de anulação/plágio corretamente.
       let existing: any[] | null = null;
       const r1 = await supabase
         .from('submissions')
-        .select('score')
+        .select('score, status')
         .eq('student_id', student.id)
         .eq('lesson_id', examId!)
         .limit(1);
@@ -159,7 +160,7 @@ export const EvaluationView: React.FC = () => {
       } else {
         const r2 = await supabase
           .from('submissions')
-          .select('score')
+          .select('score, status')
           .eq('student_id', student.id)
           .eq('subject', examData.subject)
           .eq('lesson_title', expectedTitle)
@@ -168,9 +169,20 @@ export const EvaluationView: React.FC = () => {
         existing = r2.data;
       }
 
-      if (existing && existing.length > 0) {
-        setScore(existing[0].score ?? 0);
-        setAlreadyDone(true);
+      // Verifica também a flag local (protege contra insert que falhou no banco)
+      const localAnnulled = localStorage.getItem(`exam_annulled_${examId}_${student.id}`) === '1';
+
+      if ((existing && existing.length > 0) || localAnnulled) {
+        const sub = existing?.[0];
+        const st = sub?.status || (localAnnulled ? 'annulled' : 'completed');
+        setScore(sub?.score ?? 0);
+        if (st === 'annulled') {
+          setExamAnnulled(true);
+        } else if (st === 'plagiarism') {
+          setPlagiarismFlagged(true);
+        } else {
+          setAlreadyDone(true);
+        }
         setIsFinished(true);
       }
     } catch (e: any) {
@@ -217,6 +229,8 @@ export const EvaluationView: React.FC = () => {
     setExamAnnulled(true);
     setIsFinished(true);
     localStorage.removeItem(`exam_timer_${examId}_${student?.id}`);
+    // Persiste flag local: bloqueia a prova mesmo se o insert no banco falhar
+    localStorage.setItem(`exam_annulled_${examId}_${student?.id}`, '1');
     try {
       await supabase.from('submissions').insert({
         student_id: student!.id,
