@@ -1686,7 +1686,7 @@ export const AdminDashboard: React.FC = () => {
     return students.filter(st => {
       const matchesSearch = st.name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesClass = filterClass === 'all' || st.school_class === filterClass;
-      const studentGrade = String(st.grade || st.school_class?.charAt(0) || '');
+      const studentGrade = String(st.grade || gradeFromClass(st.school_class || '') || '');
       const matchesGrade = filterGrade === 'all' || studentGrade === filterGrade;
       return matchesSearch && matchesClass && matchesGrade;
     });
@@ -1713,7 +1713,7 @@ export const AdminDashboard: React.FC = () => {
       const studentClass = sub.school_class || studentProfile?.school_class;
       const matchesClass = filterClass === 'all' || studentClass === filterClass;
       
-      const studentGrade = String(sub.grade || studentProfile?.grade || studentClass?.charAt(0) || '');
+      const studentGrade = String(sub.grade || studentProfile?.grade || gradeFromClass(studentClass || '') || '');
       const matchesGrade = filterGrade === 'all' || studentGrade === filterGrade;
       
       const matchesSubject = filterSubject === 'all' || sub.subject === filterSubject;
@@ -1743,7 +1743,7 @@ export const AdminDashboard: React.FC = () => {
       .filter(st => st.role !== 'admin') // não mostra os 7 admins na grade de notas
       .filter(st => {
         const matchesClass = filterClass === 'all' || st.school_class === filterClass;
-        const studentGrade = String(st.grade || st.school_class?.charAt(0) || '');
+        const studentGrade = String(st.grade || gradeFromClass(st.school_class || '') || '');
         const matchesGrade = filterGrade === 'all' || studentGrade === filterGrade;
         return matchesClass && matchesGrade;
       })
@@ -1804,23 +1804,37 @@ export const AdminDashboard: React.FC = () => {
     return Array.from(new Set<string>(filtered)).sort();
   };
 
-  const classOptions = useMemo(() => {
+  // Derivar série de uma turma pelo prefixo numérico (13xx→1, 23xx→2, 33xx→3)
+  const gradeFromClass = (cls: string): string => {
+    if (!cls) return '';
+    // Padrão do colégio: 13xx = 1ª série, 23xx = 2ª série, 33xx = 3ª série
+    if (cls.startsWith('13')) return '1';
+    if (cls.startsWith('23')) return '2';
+    if (cls.startsWith('33')) return '3';
+    // Fallback: primeiro dígito (casos legados)
+    const first = cls.charAt(0);
+    if (['1', '2', '3'].includes(first)) return first;
+    return '';
+  };
+
+  // Todas as turmas únicas existentes, ordenadas (independente do filtro de série)
+  const allClassOptions = useMemo(() => {
     const classes = students
       .filter(s => s.role !== 'admin')
       .map(s => s.school_class)
-      .filter((c: any): c is string => Boolean(c) && c !== 'N/A');
+      .filter((c: any): c is string => Boolean(c) && c !== 'N/A' && c.trim() !== '');
+    return Array.from(new Set(classes)).sort();
+  }, [students]);
 
-    const filtered = filterGrade === 'all'
-      ? classes
-      : classes.filter(c => c.charAt(0) === filterGrade);
+  // Turmas visíveis no filtro (respeitando a série selecionada)
+  const classOptions = useMemo(() => {
+    if (filterGrade === 'all') return allClassOptions;
+    return allClassOptions.filter(c => gradeFromClass(c) === filterGrade);
+  }, [allClassOptions, filterGrade]);
 
-    return Array.from(new Set(filtered)).sort();
-  }, [students, filterGrade]);
-
-  // Quando o prof muda de série, se a turma atual não pertence à nova série,
-  // volta para "Todas".
+  // Quando o prof muda de série, reseta turma se ela não pertence à nova série
   useEffect(() => {
-    if (filterClass !== 'all' && filterGrade !== 'all' && filterClass.charAt(0) !== filterGrade) {
+    if (filterClass !== 'all' && filterGrade !== 'all' && gradeFromClass(filterClass) !== filterGrade) {
       setFilterClass('all');
     }
   }, [filterGrade, filterClass]);
@@ -2049,13 +2063,27 @@ export const AdminDashboard: React.FC = () => {
 
                        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-3xl px-4 py-2 shadow-sm">
                           <Users size={14} className="text-slate-400"/>
-                          <select 
+                          <select
                             value={filterClass}
                             onChange={e => setFilterClass(e.target.value)}
                             className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 outline-none cursor-pointer"
                           >
                              <option value="all">Turma: Todas</option>
-                             {classOptions.map(c => <option key={c} value={c}>Turma: {c}</option>)}
+                             {filterGrade === 'all' ? (
+                               <>
+                                 {(['1','2','3'] as const).map(g => {
+                                   const gradeClasses = allClassOptions.filter(c => gradeFromClass(c) === g);
+                                   if (gradeClasses.length === 0) return null;
+                                   return (
+                                     <optgroup key={g} label={`${g}ª Série`}>
+                                       {gradeClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                     </optgroup>
+                                   );
+                                 })}
+                               </>
+                             ) : (
+                               classOptions.map(c => <option key={c} value={c}>{c}</option>)
+                             )}
                           </select>
                        </div>
 
@@ -3542,13 +3570,21 @@ export const AdminDashboard: React.FC = () => {
                               {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.school_class})</option>)}
                            </select>
                          ) : (
-                           <select 
+                           <select
                              value={filterClass}
                              onChange={e => setFilterClass(e.target.value)}
                              className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
                            >
                               <option value="all">Todas as Turmas Ativas</option>
-                              {classOptions.map(c => <option key={c} value={c}>Turma: {c}</option>)}
+                              {(['1','2','3'] as const).map(g => {
+                                const gradeClasses = allClassOptions.filter(c => gradeFromClass(c) === g);
+                                if (gradeClasses.length === 0) return null;
+                                return (
+                                  <optgroup key={g} label={`${g}ª Série`}>
+                                    {gradeClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                  </optgroup>
+                                );
+                              })}
                            </select>
                          )}
                       </div>
