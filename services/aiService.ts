@@ -571,6 +571,53 @@ export interface PedagogicalSummaryInput {
   behaviorNotes?: string[];
 }
 
+export interface SimilarityPair {
+  student1: string;
+  student2: string;
+  question: string;
+  similarity: 'high' | 'medium';
+  reason: string;
+}
+
+export interface SimilarityReport {
+  flaggedPairs: SimilarityPair[];
+  summary: string;
+  checkedAt: string;
+}
+
+export const detectAnswerSimilarity = async (
+  examTitle: string,
+  submissions: Array<{ studentName: string; schoolClass: string; answers: Array<{ question: string; answer: string }> }>
+): Promise<SimilarityReport> => {
+  if (submissions.length < 2) {
+    return { flaggedPairs: [], summary: 'Poucos dados para comparação (mínimo 2 alunos).', checkedAt: new Date().toISOString() };
+  }
+  const disc = submissions.filter(s => s.answers.some(a => a.answer?.trim().length > 20));
+  if (disc.length < 2) {
+    return { flaggedPairs: [], summary: 'Nenhuma resposta discursiva suficientemente longa para comparar.', checkedAt: new Date().toISOString() };
+  }
+  const prompt = `Você é um detector de cola acadêmica especializado. Analise as respostas discursivas abaixo de alunos na avaliação "${examTitle}" e identifique pares com similaridade suspeita (frases idênticas, mesmos erros, estrutura copiada, ou texto gerado por IA).
+
+Submissões:
+${disc.map((s, i) => `--- Aluno ${i + 1}: ${s.studentName} (Turma ${s.schoolClass}) ---\n${s.answers.filter(a => a.answer?.trim().length > 20).map(a => `Questão: "${a.question.slice(0, 100)}"\nResposta: "${a.answer.slice(0, 500)}"`).join('\n\n')}`).join('\n\n')}
+
+Retorne JSON EXATO:
+{"flaggedPairs":[{"student1":"Nome","student2":"Nome","question":"trecho","similarity":"high|medium","reason":"explicação em português"}],"summary":"resumo em português"}
+Só inclua pares com cola real. "high"=texto quase idêntico. "medium"=estrutura suspeita. Se nada suspeito: flaggedPairs=[].`;
+  try {
+    const raw = await callDeepSeek(prompt, { temperature: 0.2, maxTokens: 2000 });
+    const parsed = extractJson<{ flaggedPairs: SimilarityPair[]; summary: string }>(raw);
+    return {
+      flaggedPairs: Array.isArray(parsed?.flaggedPairs) ? parsed.flaggedPairs : [],
+      summary: String(parsed?.summary || 'Análise concluída.'),
+      checkedAt: new Date().toISOString(),
+    };
+  } catch (e) {
+    console.warn('[IA] Falha na detecção de similaridade:', e);
+    return { flaggedPairs: [], summary: 'Falha ao processar análise.', checkedAt: new Date().toISOString() };
+  }
+};
+
 export const generatePedagogicalSummary = async (
   context: 'INDIVIDUAL' | 'TURMA',
   data: PedagogicalSummaryInput

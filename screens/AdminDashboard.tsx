@@ -349,6 +349,9 @@ export const AdminDashboard: React.FC = () => {
 
   // Modal de Visualização de Submissão
   const [viewingSubmission, setViewingSubmission] = useState<any | null>(null);
+  const [similarityReport, setSimilarityReport] = useState<any | null>(null);
+  const [similarityExamTitle, setSimilarityExamTitle] = useState('');
+  const [isCheckingSimilarity, setIsCheckingSimilarity] = useState(false);
   const [manualFeedback, setManualFeedback] = useState('');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
   const [isRequestingRedo, setIsRequestingRedo] = useState(false);
@@ -1590,6 +1593,44 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleCheckSimilarity = async (examLessonId: string, examTitle: string) => {
+    setIsCheckingSimilarity(true);
+    setSimilarityExamTitle(examTitle);
+    setSimilarityReport(null);
+    try {
+      const { data: subs, error } = await supabase
+        .from('submissions')
+        .select('student_name, school_class, content, ai_feedback')
+        .eq('lesson_id', examLessonId);
+      if (error) throw error;
+      const submissionsForAI = (subs || []).map((s: any) => {
+        const answers: { question: string; answer: string }[] = [];
+        if (Array.isArray(s.content)) {
+          s.content.forEach((c: any) => {
+            if (c.question && c.answer && String(c.answer).trim().length > 10) {
+              answers.push({ question: String(c.question).slice(0, 120), answer: String(c.answer).slice(0, 600) });
+            }
+          });
+        }
+        if (Array.isArray(s.ai_feedback?.corrections)) {
+          s.ai_feedback.corrections.filter((c: any) => c.type === 'discursive').forEach((c: any) => {
+            if (c.studentAnswer && String(c.studentAnswer).trim().length > 10)
+              answers.push({ question: String(c.question || '').slice(0, 120), answer: String(c.studentAnswer).slice(0, 600) });
+          });
+        }
+        return { studentName: s.student_name || '?', schoolClass: s.school_class || '?', answers };
+      }).filter(s => s.answers.length > 0);
+
+      const { detectAnswerSimilarity } = await import('../services/aiService');
+      const report = await detectAnswerSimilarity(examTitle, submissionsForAI);
+      setSimilarityReport(report);
+    } catch (e: any) {
+      alert('Erro ao verificar similaridade: ' + (e?.message || ''));
+    } finally {
+      setIsCheckingSimilarity(false);
+    }
+  };
+
   const [yearTurnoverLoading, setYearTurnoverLoading] = useState(false);
 
   const handleYearTurnover = async () => {
@@ -2435,13 +2476,38 @@ export const AdminDashboard: React.FC = () => {
 
             return (
               <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="flex items-center justify-between px-2">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-2">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     {groups.length} {groups.length === 1 ? 'estudante' : 'estudantes'} · {filteredSubmissions.length} entregas
                   </p>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:block">
-                    Clique no estudante para expandir
-                  </p>
+                  {/* Detectar cola — só disponível com filtro de avaliação ativo */}
+                  {(() => {
+                    const examSubs = filteredSubmissions.filter((s: any) =>
+                      String(s.lesson_title || '').toLowerCase().includes('avaliação') ||
+                      String(s.lesson_title || '').toLowerCase().includes('simulado')
+                    );
+                    const examIds = [...new Set(examSubs.map((s: any) => s.lesson_id).filter(Boolean))];
+                    if (examIds.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-2">
+                        {examIds.slice(0, 4).map((eid: string) => {
+                          const title = examSubs.find((s: any) => s.lesson_id === eid)?.lesson_title || eid;
+                          return (
+                            <button
+                              key={eid}
+                              onClick={() => handleCheckSimilarity(eid, title)}
+                              disabled={isCheckingSimilarity}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-cosmic text-white rounded-full text-[9px] font-black uppercase tracking-widest hover:scale-105 shadow-glow-purple transition-all disabled:opacity-50"
+                              title={`Detectar cola na avaliação: ${title}`}
+                            >
+                              {isCheckingSimilarity ? <Loader2 size={11} className="animate-spin"/> : <BrainCircuit size={11}/>}
+                              🔍 Detectar Cola · {title.slice(0, 30)}{title.length > 30 ? '…' : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {groups.length === 0 ? (
@@ -4004,6 +4070,59 @@ export const AdminDashboard: React.FC = () => {
                  </div>
               </div>
            </div>
+        </div>
+      )}
+
+      {/* Modal: Relatório de Similaridade (detecção de cola) */}
+      {(similarityReport || isCheckingSimilarity) && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+              <div>
+                <h3 className="font-black text-slate-800 dark:text-white text-lg tracking-tight">🔍 Detector de Cola — IA</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{similarityExamTitle}</p>
+              </div>
+              <button onClick={() => { setSimilarityReport(null); setSimilarityExamTitle(''); }} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <X size={20} className="text-slate-500"/>
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-4 flex-1">
+              {isCheckingSimilarity ? (
+                <div className="py-16 flex flex-col items-center gap-4">
+                  <Loader2 className="animate-spin text-vibe-purple" size={40}/>
+                  <p className="font-black text-slate-500 uppercase text-[10px] tracking-widest">Analisando respostas com IA…</p>
+                </div>
+              ) : similarityReport && (
+                <>
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl">
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300 leading-relaxed">{similarityReport.summary}</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Análise em {new Date(similarityReport.checkedAt).toLocaleString('pt-BR')}</p>
+                  </div>
+                  {similarityReport.flaggedPairs.length === 0 ? (
+                    <div className="p-6 text-center bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-800">
+                      <p className="text-3xl mb-2">✅</p>
+                      <p className="font-black text-emerald-700 dark:text-emerald-400">Nenhuma cola detectada</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {similarityReport.flaggedPairs.map((pair: any, i: number) => (
+                        <div key={i} className={`p-4 rounded-2xl border-l-4 ${pair.similarity === 'high' ? 'bg-red-50 dark:bg-red-900/10 border-red-500' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-400'}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${pair.similarity === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
+                              {pair.similarity === 'high' ? '🔴 Alta' : '🟡 Média'}
+                            </span>
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-200">{pair.student1} × {pair.student2}</span>
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Questão: {pair.question}</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 font-medium leading-relaxed">{pair.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
