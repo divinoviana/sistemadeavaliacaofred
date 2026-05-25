@@ -1796,11 +1796,13 @@ export const AdminDashboard: React.FC = () => {
   // mostra apenas as turmas daquela série (ex.: filtro 1ª → só 13.xx).
   // Turmas disponíveis para uma série específica (independente do filtro da toolbar).
   const classesForGrade = (gradeStr: string): string[] => {
-    const all: string[] = students
+    const fromStudents: string[] = students
       .filter(s => s.role !== 'admin')
       .map((s: any) => s.school_class as string)
       .filter((c: any): c is string => Boolean(c) && c !== 'N/A');
-    const filtered = !gradeStr || gradeStr === 'all' ? all : all.filter(c => c.charAt(0) === gradeStr);
+    const fromSeed: string[] = STUDENTS_SEED_DATA.map((s: any) => s.school_class as string);
+    const all = [...new Set([...fromStudents, ...fromSeed])];
+    const filtered = !gradeStr || gradeStr === 'all' ? all : all.filter(c => gradeFromClass(c) === gradeStr);
     return Array.from(new Set<string>(filtered)).sort();
   };
 
@@ -1817,14 +1819,18 @@ export const AdminDashboard: React.FC = () => {
     return '';
   };
 
-  // Todas as turmas únicas existentes, ordenadas (independente do filtro de série)
+  // Todas as turmas únicas existentes, ordenadas (independente do filtro de série).
+  // Combina alunos + submissões + seed para funcionar mesmo quando o banco está incompleto.
   const allClassOptions = useMemo(() => {
-    const classes = students
+    const fromStudents = students
       .filter(s => s.role !== 'admin')
-      .map(s => s.school_class)
-      .filter((c: any): c is string => Boolean(c) && c !== 'N/A' && c.trim() !== '');
-    return Array.from(new Set(classes)).sort();
-  }, [students]);
+      .map((s: any) => s.school_class as string);
+    const fromSubmissions = submissions.map((s: any) => s.school_class as string);
+    const fromSeed = STUDENTS_SEED_DATA.map((s: any) => s.school_class as string);
+    const all = [...fromStudents, ...fromSubmissions, ...fromSeed]
+      .filter((c): c is string => Boolean(c) && c !== 'N/A' && c.trim() !== '');
+    return Array.from(new Set(all)).sort();
+  }, [students, submissions]);
 
   // Turmas visíveis no filtro (respeitando a série selecionada)
   const classOptions = useMemo(() => {
