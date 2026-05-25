@@ -1476,29 +1476,46 @@ export const AdminDashboard: React.FC = () => {
     try {
       const { generatePedagogicalSummary } = await import('../services/aiService');
 
-      // Resolve nome do aluno selecionado (caso individual)
+      // Resolve aluno selecionado — selectedReportStudent agora armazena o ID
       const targetStudent = reportTarget === 'student'
         ? students.find(s => s.id === selectedReportStudent)
         : null;
 
-      // Submissões relevantes para o relatório
-      const relevant = submissions.filter(s => {
-        if (reportTarget === 'student') {
-          return s.student_id === selectedReportStudent
-              || (targetStudent && s.student_name?.toLowerCase().trim() === targetStudent.name?.toLowerCase().trim());
-        }
-        return filterClass === 'all' || s.school_class === filterClass;
-      });
+      // Busca submissões DIRETAMENTE do banco para não depender dos filtros
+      // ativos no estado local (filterClass, filterSubject, etc.)
+      let freshQuery = supabase
+        .from('submissions')
+        .select('*')
+        .order('submitted_at', { ascending: true })
+        .limit(500);
+      if (reportTarget === 'student') {
+        freshQuery = freshQuery.eq('student_id', selectedReportStudent);
+      } else if (filterClass !== 'all') {
+        freshQuery = freshQuery.eq('school_class', filterClass);
+      }
+      const { data: freshSubs, error: freshErr } = await freshQuery;
+      if (freshErr) throw freshErr;
+      const relevant = freshSubs || [];
 
-      // Buscar anotações (student_notes) + extrair categoria pra enriquecer
-      // o cruzamento da IA. Cada categoria vira um sinal pedagógico distinto.
+      // Busca anotações pedagógicas (student_notes) filtradas corretamente
       let behaviorNotes: string[] = [];
       try {
-        let qb = supabase.from('student_notes').select('*').order('created_at', { ascending: false });
-        if (reportTarget === 'student' && selectedReportStudent) qb = qb.eq('student_id', selectedReportStudent);
+        let qb = supabase
+          .from('student_notes')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(200);
+        if (reportTarget === 'student') {
+          qb = qb.eq('student_id', selectedReportStudent);
+        } else if (filterClass !== 'all') {
+          // Para turma: restringe às IDs dos alunos daquela turma
+          const classIds = students
+            .filter(s => s.school_class === filterClass)
+            .map(s => s.id);
+          if (classIds.length > 0) qb = qb.in('student_id', classIds);
+        }
         const { data: notes } = await qb;
         behaviorNotes = (notes || []).map((n: any) => {
-          // Tenta extrair categoria da coluna ou do prefixo "[categoria] texto"
           let cat = (n.category || '').toLowerCase();
           let content = n.content || '';
           if (!cat) {
@@ -1507,35 +1524,46 @@ export const AdminDashboard: React.FC = () => {
           }
           const subj = n.subject || n.teacher_subject || 'geral';
           const date = n.created_at ? new Date(n.created_at).toLocaleDateString('pt-BR') : '';
-          return `[${cat || 'geral'} • ${subj} • ${date}] ${content}`;
+          return `[${cat || 'geral'} · ${subj} · ${date}] ${content}`;
         });
       } catch (e) {
         console.warn('Falha ao buscar student_notes:', e);
       }
 
+      // Estrutura atividades com bimestre e matéria para cruzamento rico
       const activities = relevant.map((s: any) => ({
         title: s.lesson_title,
         score: Number(s.score) || 0,
-        bimester: (s.lesson_id ? lessonToBimesterMap[s.lesson_id] : null) || lessonToBimesterMap[s.lesson_title] || undefined,
+        bimester: (s.lesson_id ? lessonToBimesterMap[s.lesson_id] : null)
+          || lessonToBimesterMap[s.lesson_title]
+          || bimesterFromTitle(s.lesson_title)
+          || undefined,
         date: s.submitted_at || s.submission_date,
         subject: s.subject,
+        teacherFeedback: s.teacher_feedback || '',
+        status: s.status,
       }));
+
+      const targetClass = filterClass !== 'all'
+        ? filterClass
+        : (targetStudent?.school_class || 'Geral');
 
       const result = await generatePedagogicalSummary(
         reportTarget === 'student' ? 'INDIVIDUAL' : 'TURMA',
         {
           subject: teacherSubject || 'Geral',
-          grades: relevant.map(s => Number(s.score) || 0),
-          notes: relevant.map(s => s.teacher_feedback || '').filter(Boolean),
+          grades: relevant.map((s: any) => Number(s.score) || 0),
+          notes: relevant.map((s: any) => s.teacher_feedback || '').filter(Boolean),
           studentName: targetStudent?.name,
-          schoolClass: filterClass,
+          schoolClass: targetClass,
           activities,
           behaviorNotes,
         }
       );
       setAiReportResult(result);
     } catch (e: any) {
-      alert("Erro ao gerar relatório: " + e.message);
+      alert('Erro ao gerar relatório: ' + (e?.message || 'tente novamente'));
+      console.error(e);
     } finally {
       setIsGeneratingReport(false);
     }
@@ -1664,6 +1692,13 @@ export const AdminDashboard: React.FC = () => {
     });
   }, [students, searchTerm, filterClass, filterGrade]);
 
+  // Extrai número do bimestre a partir do título da aula/simulado
+  const bimesterFromTitle = (title?: string): number | null => {
+    if (!title) return null;
+    const m = String(title).match(/(\d)\s*º\s*bimestre/i);
+    return m ? Number(m[1]) : null;
+  };
+
   const filteredSubmissions = useMemo(() => {
     return submissions.filter(sub => {
       const matchesSearch = searchTerm === '' || 
@@ -1720,13 +1755,6 @@ export const AdminDashboard: React.FC = () => {
           activities: [],
         };
       });
-
-    // Extrai número do bimestre a partir do título do simulado/aula
-    const bimesterFromTitle = (title?: string) => {
-      if (!title) return null;
-      const m = String(title).match(/(\d)\s*º\s*bimestre/i);
-      return m ? Number(m[1]) : null;
-    };
 
     // 2) Enriquecer com submissões (filtradas por matéria do professor)
     submissions
@@ -3511,7 +3539,7 @@ export const AdminDashboard: React.FC = () => {
                              className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10"
                            >
                               <option value="">Selecione um Estudante...</option>
-                              {students.map(s => <option key={s.id} value={s.name}>{s.name} ({s.school_class})</option>)}
+                              {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.school_class})</option>)}
                            </select>
                          ) : (
                            <select 

@@ -623,53 +623,114 @@ export const generatePedagogicalSummary = async (
   data: PedagogicalSummaryInput
 ): Promise<string> => {
   return withRetry(async () => {
-    const target = context === 'INDIVIDUAL' ? `Aluno: ${data.studentName}` : `Turma: ${data.schoolClass}`;
-    const avg = data.grades.length ? (data.grades.reduce((a, b) => a + b, 0) / data.grades.length).toFixed(2) : 'sem registros';
-    const max = data.grades.length ? Math.max(...data.grades).toFixed(1) : '-';
-    const min = data.grades.length ? Math.min(...data.grades).toFixed(1) : '-';
+    const target = context === 'INDIVIDUAL'
+      ? `Aluno: ${data.studentName || '(não identificado)'}`
+      : `Turma: ${data.schoolClass || 'Geral'}`;
 
-    const prompt = `Atue como Coordenador Pedagógico. Gere um relatório em **Markdown** para o contexto:
-${target}
-Disciplina: ${data.subject}
-Turma de referência: ${data.schoolClass}
+    const grades = data.grades.filter(g => g > 0);
+    const avg = grades.length ? (grades.reduce((a, b) => a + b, 0) / grades.length).toFixed(2) : 'sem registros';
+    const max = grades.length ? Math.max(...grades).toFixed(1) : '-';
+    const min = grades.length ? Math.min(...grades).toFixed(1) : '-';
+    const abaixo5 = grades.filter(g => g < 5).length;
+    const entre5e7 = grades.filter(g => g >= 5 && g < 7).length;
+    const acima7 = grades.filter(g => g >= 7).length;
 
-Estatísticas das notas:
-- Quantidade de avaliações: ${data.grades.length}
-- Média: ${avg}
-- Maior nota: ${max}
-- Menor nota: ${min}
-- Notas brutas: ${JSON.stringify(data.grades)}
+    // Agrupamento por matéria
+    const bySubject: Record<string, number[]> = {};
+    const byBimester: Record<string, number[]> = {};
+    (data.activities || []).forEach(a => {
+      if (a.subject) {
+        bySubject[a.subject] = bySubject[a.subject] || [];
+        bySubject[a.subject].push(Number(a.score) || 0);
+      }
+      if (a.bimester) {
+        const bk = `${a.bimester}º Bimestre`;
+        byBimester[bk] = byBimester[bk] || [];
+        byBimester[bk].push(Number(a.score) || 0);
+      }
+    });
 
-Anotações pedagógicas do professor:
-${(data.notes || []).map((n, i) => `${i + 1}. ${n}`).join('\n') || '(nenhuma)'}
+    const subjectBlock = Object.entries(bySubject).map(([subj, sc]) => {
+      const avg = (sc.reduce((a, b) => a + b, 0) / sc.length).toFixed(1);
+      return `  ${subj}: média ${avg} (${sc.length} avaliações, notas: ${sc.map(n => n.toFixed(1)).join(', ')})`;
+    }).join('\n') || '  (sem discriminação por matéria)';
 
-${data.behaviorNotes && data.behaviorNotes.length ? `Anotações de comportamento:\n${data.behaviorNotes.map((n,i) => `${i+1}. ${n}`).join('\n')}` : ''}
+    const bimesterBlock = Object.entries(byBimester).map(([bim, sc]) => {
+      const avg = (sc.reduce((a, b) => a + b, 0) / sc.length).toFixed(1);
+      return `  ${bim}: média ${avg} (${sc.length} avaliações)`;
+    }).join('\n') || '  (sem discriminação por bimestre)';
 
-${data.activities && data.activities.length ? `Atividades detalhadas:\n${JSON.stringify(data.activities)}` : ''}
+    const feedbacksBlock = (data.activities || [])
+      .filter((a: any) => a.teacherFeedback)
+      .map((a: any) => `  - [${a.subject || '?'}] ${a.title}: "${a.teacherFeedback}"`)
+      .join('\n') || '  (nenhum feedback registrado)';
 
-Estrutura obrigatória do relatório:
+    const prompt = `Atue como Coordenador Pedagógico. Gere um relatório diagnóstico completo em **Markdown** para:
+
+**${target}**
+Escola: Colégio Estadual Frederico Pedreira Neto — Tocantins
+Turma de referência: ${data.schoolClass || 'Geral'}
+Disciplina/Área analisada: ${data.subject}
+
+---
+
+### DADOS DE DESEMPENHO (${grades.length} avaliações com nota)
+
+**Resumo geral:**
+- Média geral: **${avg}** · Maior: ${max} · Menor: ${min}
+- Abaixo de 5: ${abaixo5} · Entre 5 e 7: ${entre5e7} · Acima de 7: ${acima7}
+
+**Por disciplina:**
+${subjectBlock}
+
+**Por bimestre:**
+${bimesterBlock}
+
+**Feedbacks do professor nas atividades:**
+${feedbacksBlock}
+
+---
+
+### ANOTAÇÕES PEDAGÓGICAS DO PROFESSOR (${(data.notes || []).length} registros)
+${(data.notes || []).map((n, i) => `${i + 1}. ${n}`).join('\n') || '(nenhuma anotação registrada)'}
+
+---
+
+### ANOTAÇÕES DE COMPORTAMENTO E CONTEXTO (${(data.behaviorNotes || []).length} registros)
+${(data.behaviorNotes || []).length > 0
+  ? (data.behaviorNotes || []).map((n, i) => `${i + 1}. ${n}`).join('\n')
+  : '(nenhuma anotação de comportamento registrada)'}
+
+---
+
+**Produza o relatório com esta estrutura obrigatória:**
+
 ## 1. Análise de Desempenho
-Interprete as notas: tendência, dispersão, evolução por bimestre, pontos de atenção.
+Interprete as notas: tendência, evolução por bimestre, dispersão, comparativo entre matérias. Sinalize padrões preocupantes (queda progressiva, matérias específicas, etc.) e pontos fortes.
 
 ## 2. Síntese Qualitativa
-O que as anotações pedagógicas e (se houver) as observações de comportamento revelam sobre engajamento, dificuldades e potencialidades.
+O que as anotações pedagógicas e de comportamento revelam sobre: engajamento, dificuldades específicas, contexto familiar/emocional, potencialidades. Cruze com as notas — o quadro é coerente?
 
 ## 3. Cruzamento de Indicadores
-Conecte notas, comportamento e observações: há padrão? aluno com queda nas notas e queda de engajamento? boa nota mas comportamento de risco?
+Conecte nota × comportamento × feedbacks: há padrão de desengajamento coincidindo com queda de nota? Dificuldade pontual em uma matéria ou generalizada? Alerta de possível situação de vulnerabilidade?
 
 ## 4. Plano de Intervenção Pedagógica
-3 a 5 ações concretas, mensuráveis e com prazo (curto/médio prazo). Inclua:
-- Estratégias de sala de aula específicas
-- Recursos e mediação familiar quando necessário
-- Indicadores que mostrem se a intervenção está funcionando
+Liste de 4 a 6 ações **concretas, mensuráveis e com prazo** (imediato / curto prazo / médio prazo):
+- Estratégias didáticas específicas por área de dificuldade
+- Mediação familiar ou com equipe de apoio quando indicado
+- Indicadores de monitoramento (como saber se a intervenção está funcionando)
+- Encaminhamentos institucionais se necessário
 
-Tom: profissional, empático, focado em soluções.`;
+## 5. Considerações Finais
+Uma síntese objetiva (3 a 4 linhas) para o arquivo do aluno/turma.
+
+**Regras:** use apenas os dados fornecidos acima. Não invente notas, eventos ou observações. Se os dados forem insuficientes para alguma seção, diga explicitamente. Tom: profissional, empático, focado em soluções.`;
 
     return callDeepSeek(prompt, {
       model: 'deepseek-chat',
-      temperature: 0.5,
-      maxTokens: 4096,
-      systemPrompt: 'Você é um Coordenador Pedagógico experiente. Produza relatórios analíticos em Markdown bem estruturado, sem inventar dados que não estejam na entrada.',
+      temperature: 0.4,
+      maxTokens: 5000,
+      systemPrompt: 'Você é um Coordenador Pedagógico experiente de escola pública brasileira. Produza relatórios diagnósticos em Markdown bem estruturado, fundamentados nos dados fornecidos, sem inventar informações.',
     });
   });
 };
