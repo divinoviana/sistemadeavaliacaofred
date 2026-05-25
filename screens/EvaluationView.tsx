@@ -844,13 +844,22 @@ export const EvaluationView: React.FC = () => {
             <div className="bg-white dark:bg-slate-900 rounded-[40px] p-12 text-center">
               <div className="w-28 h-28 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-6 text-6xl">🚫</div>
               <h2 className="text-4xl font-black tracking-tighter mb-3 text-red-600 dark:text-red-400">Prova Anulada</h2>
-              <p className="text-slate-600 dark:text-slate-400 font-bold text-sm mb-6 max-w-md mx-auto leading-relaxed">
-                Você atingiu <strong>{MAX_VIOLATIONS} infrações</strong> (saídas de tela e tentativas de colar texto).<br/>
-                Sua nota foi registrada como <strong>0</strong> e o professor foi notificado.
-              </p>
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-4 mb-8 inline-block">
-                <p className="text-red-700 dark:text-red-300 text-xs font-black uppercase tracking-widest">Infrações registradas: {tabSwitches} saídas + {pasteAttempts} tentativas de cola</p>
-              </div>
+              {(tabSwitches + pasteAttempts) >= MAX_VIOLATIONS ? (
+                <>
+                  <p className="text-slate-600 dark:text-slate-400 font-bold text-sm mb-6 max-w-md mx-auto leading-relaxed">
+                    Você atingiu <strong>{MAX_VIOLATIONS} infrações</strong> (saídas de tela e tentativas de colar texto).<br/>
+                    Sua nota foi registrada como <strong>0</strong> e o professor foi notificado.
+                  </p>
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-4 mb-8 inline-block">
+                    <p className="text-red-700 dark:text-red-300 text-xs font-black uppercase tracking-widest">Infrações registradas: {tabSwitches} saídas + {pasteAttempts} tentativas de cola</p>
+                  </div>
+                </>
+              ) : (
+                <p className="text-slate-600 dark:text-slate-400 font-bold text-sm mb-8 max-w-md mx-auto leading-relaxed">
+                  Esta avaliação foi <strong>anulada pelo professor</strong>.<br/>
+                  Sua nota foi registrada como <strong>0</strong>. Verifique suas mensagens ou fale com o professor para mais informações.
+                </p>
+              )}
               <Link to="/" className="block bg-slate-900 dark:bg-slate-800 text-white py-4 px-8 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all">
                 Voltar ao Início
               </Link>

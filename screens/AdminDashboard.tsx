@@ -13,7 +13,7 @@ import {
   Clock, Send, BrainCircuit, Sparkles, FileText, CheckCircle2,
   Filter, Download, GraduationCap, ChevronRight, ClipboardEdit, 
   BarChart3, Printer, Wand2, Library, ListChecks, Database,
-  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target, AlertTriangle, ExternalLink, KeyRound, Menu
+  Sun, Moon, Presentation, ClipboardList, LogOut, Pencil, Eye, UserCircle, RotateCw, MapPin, Crosshair, Target, AlertTriangle, ExternalLink, KeyRound, Menu, Ban
 } from 'lucide-react';
 
 // =====================================================================
@@ -355,6 +355,7 @@ export const AdminDashboard: React.FC = () => {
   const [manualFeedback, setManualFeedback] = useState('');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
   const [isRequestingRedo, setIsRequestingRedo] = useState(false);
+  const [isAnnullingSubmission, setIsAnnullingSubmission] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
 
   const [isSeedingStudents, setIsSeedingStudents] = useState(false);
@@ -1618,6 +1619,61 @@ export const AdminDashboard: React.FC = () => {
       console.error(e);
     } finally {
       setIsRequestingRedo(false);
+    }
+  };
+
+  // Anula o simulado/redação: muda status → 'annulled', envia mensagem ao aluno e
+  // bloqueia nova tentativa (EvaluationView verifica status='annulled').
+  const handleAnnulSubmission = async () => {
+    if (!viewingSubmission || isAnnullingSubmission) return;
+    const isEssay = viewingSubmission.ai_feedback?.type === 'essay_enem'
+      || String(viewingSubmission.lesson_title || '').startsWith('Redação:');
+    const tipo = isEssay ? 'a redação' : 'o simulado';
+    const tipoMsg = isEssay ? 'redação' : 'simulado';
+    const ok = confirm(
+      `Anular ${tipo} "${viewingSubmission.lesson_title}" de ${viewingSubmission.student_name}?\n\n` +
+      `⚠️ O aluno receberá uma mensagem automática e NÃO poderá refazer esta avaliação.\n\n` +
+      `Esta ação não pode ser desfeita.`
+    );
+    if (!ok) return;
+    setIsAnnullingSubmission(true);
+    try {
+      // 1. Atualiza status da submissão para 'annulled'
+      const { error: updErr } = await supabase
+        .from('submissions')
+        .update({ status: 'annulled', score: 0 })
+        .eq('id', viewingSubmission.id);
+      if (updErr) throw updErr;
+
+      // 2. Envia mensagem automática ao aluno
+      const msgContent = `🚫 Aviso: Sua ${tipoMsg} "${viewingSubmission.lesson_title}" foi anulada pelo professor. Nota zerada. Entre em contato para mais informações.`;
+      const msgPayload: any = {
+        sender_id: student?.id,
+        sender_name: student?.name || 'Professor',
+        receiver_id: viewingSubmission.student_id,
+        school_class: viewingSubmission.school_class || null,
+        grade: viewingSubmission.grade || null,
+        content: msgContent,
+        is_from_teacher: true,
+        subject: viewingSubmission.subject || teacherSubject || 'Geral',
+      };
+      let attempts = 0;
+      while (attempts < 4) {
+        const r = await supabase.from('messages').insert(msgPayload);
+        if (!r.error) break;
+        const m = String(r.error?.message || '').match(/'([^']+)' column of/i);
+        const col = m?.[1];
+        if (col && col in msgPayload) { delete msgPayload[col]; attempts++; } else break;
+      }
+
+      alert(`✅ ${viewingSubmission.student_name} foi notificado(a): "${viewingSubmission.lesson_title}" foi anulada.`);
+      setViewingSubmission(null);
+      fetchSubmissions();
+    } catch (e: any) {
+      alert('Erro ao anular: ' + (e?.message || ''));
+      console.error(e);
+    } finally {
+      setIsAnnullingSubmission(false);
     }
   };
 
@@ -4375,18 +4431,29 @@ export const AdminDashboard: React.FC = () => {
                       className="w-full h-32 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-2xl px-6 py-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/10 transition-all resize-none"
                     />
                     <div className="flex flex-wrap justify-between items-center gap-3">
-                       <button
-                         onClick={handleRequestRedo}
-                         disabled={isRequestingRedo || isSavingFeedback}
-                         className="flex items-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:scale-105 transition-all cursor-pointer disabled:opacity-50"
-                         title="Remove esta entrega e libera o aluno para fazer de novo"
-                       >
-                          {isRequestingRedo ? <Loader2 className="animate-spin" size={14}/> : <RotateCw size={14}/>}
-                          Pedir para Refazer
-                       </button>
+                       <div className="flex flex-wrap gap-2">
+                         <button
+                           onClick={handleRequestRedo}
+                           disabled={isRequestingRedo || isSavingFeedback || isAnnullingSubmission || viewingSubmission?.status === 'annulled'}
+                           className="flex items-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:scale-105 transition-all cursor-pointer disabled:opacity-50"
+                           title="Remove esta entrega e libera o aluno para fazer de novo"
+                         >
+                           {isRequestingRedo ? <Loader2 className="animate-spin" size={14}/> : <RotateCw size={14}/>}
+                           Pedir para Refazer
+                         </button>
+                         <button
+                           onClick={handleAnnulSubmission}
+                           disabled={isAnnullingSubmission || isRequestingRedo || isSavingFeedback || viewingSubmission?.status === 'annulled'}
+                           className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-red-500/20 hover:scale-105 transition-all cursor-pointer disabled:opacity-50"
+                           title="Anula a prova, zera a nota e notifica o aluno automaticamente"
+                         >
+                           {isAnnullingSubmission ? <Loader2 className="animate-spin" size={14}/> : <Ban size={14}/>}
+                           {viewingSubmission?.status === 'annulled' ? 'Anulada' : 'Anular Prova'}
+                         </button>
+                       </div>
                        <button
                          onClick={handleSaveFeedback}
-                         disabled={isSavingFeedback || isRequestingRedo}
+                         disabled={isSavingFeedback || isRequestingRedo || isAnnullingSubmission}
                          className="flex items-center gap-2 px-8 py-3 bg-tocantins-blue text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:scale-105 transition-all cursor-pointer disabled:opacity-50"
                        >
                           {isSavingFeedback ? <Loader2 className="animate-spin" size={14}/> : <Send size={14}/>}
