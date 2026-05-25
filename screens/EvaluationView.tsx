@@ -33,8 +33,8 @@ function seededShuffle<T>(arr: T[], rng: () => number): T[] {
   return a;
 }
 
-const EXAM_DURATION_SECS = 30 * 60; // 30 minutos
-const MAX_VIOLATIONS = 10;          // anula na 10ª infração
+const EXAM_DURATION_SECS = 130 * 60; // 130 minutos
+const MAX_VIOLATIONS = 10;           // anula na 10ª infração
 
 export const EvaluationView: React.FC = () => {
   const { examId } = useParams<{ examId: string }>();
@@ -56,12 +56,42 @@ export const EvaluationView: React.FC = () => {
   const [isCorrectingEssay, setIsCorrectingEssay] = useState(false);
   const isEssay = exam?.type === 'essay' || (exam?.questions?.[0]?.type === 'essay');
 
-  // ── Anti-cola: timer + violações ─────────────────────────────────────────
+  // ── Anti-cola: timer + violações + plágio ────────────────────────────────
   const [timeLeft, setTimeLeft] = useState(EXAM_DURATION_SECS);
   const [examAnnulled, setExamAnnulled] = useState(false);
   const [violationModalOpen, setViolationModalOpen] = useState(false);
+  const [isPlagiarismChecking, setIsPlagiarismChecking] = useState(false);
+  const [plagiarismFlagged, setPlagiarismFlagged] = useState(false);
   const skipValidationRef = useRef(false);
   const prevViolationsRef = useRef(0);
+
+  // ── Marca d'água: tile canvas com nome + turma + data ────────────────────
+  // Gerado uma vez por aluno, usado como background-image repetido no overlay.
+  const watermarkUrl = useMemo(() => {
+    if (!student) return '';
+    try {
+      const date = new Date().toLocaleDateString('pt-BR');
+      const line1 = `${student.name?.trim() || 'Aluno'} · Turma ${student.school_class}`;
+      const line2 = date;
+      const canvas = document.createElement('canvas');
+      canvas.width = 340;
+      canvas.height = 160;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.globalAlpha = 0.10;
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 14px Arial, sans-serif';
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(-Math.PI / 7);
+      ctx.fillText(line1, -ctx.measureText(line1).width / 2, -8);
+      ctx.font = '12px Arial, sans-serif';
+      ctx.fillText(line2, -ctx.measureText(line2).width / 2, 12);
+      ctx.restore();
+      return canvas.toDataURL();
+    } catch { return ''; }
+  }, [student?.id]);
 
   // ── Questões embaralhadas (determinístico por aluno) ──────────────────────
   const shuffledQuestions: any[] = useMemo(() => {
@@ -406,6 +436,58 @@ export const EvaluationView: React.FC = () => {
       finalScore = discursiveScoreAvg;
     }
     finalScore = Math.round(finalScore * 10) / 10; // 1 casa decimal
+
+    // ── Verificação de plágio nas respostas dissertativas ─────────────────
+    let plagiarismDetected = false;
+    let plagiarismNote = '';
+    if (discursiveQs.length > 0) {
+      try {
+        setIsPlagiarismChecking(true);
+        const myDiscAnswers = discursiveQs.map((q: any) => ({
+          question: q.questionText,
+          answer: String(answers[q.id] || '').trim(),
+        })).filter(a => a.answer.length > 20);
+
+        if (myDiscAnswers.length > 0) {
+          const { data: otherSubs } = await supabase
+            .from('submissions')
+            .select('student_name, school_class, ai_feedback')
+            .eq('lesson_id', examId!)
+            .limit(80);
+
+          const otherForAI = (otherSubs || []).map((s: any) => {
+            const ans = (s.ai_feedback?.corrections || [])
+              .filter((c: any) => c.type === 'discursive' && String(c.studentAnswer || '').trim().length > 20)
+              .map((c: any) => ({ question: String(c.question || ''), answer: String(c.studentAnswer) }));
+            return { studentName: s.student_name || '?', schoolClass: s.school_class || '?', answers: ans };
+          }).filter(s => s.answers.length > 0);
+
+          if (otherForAI.length > 0) {
+            const allForAI = [
+              { studentName: student!.name?.trim(), schoolClass: student!.school_class?.trim(), answers: myDiscAnswers },
+              ...otherForAI,
+            ];
+            const { detectAnswerSimilarity } = await import('../services/aiService');
+            const report = await detectAnswerSimilarity(exam.title || 'Avaliação', allForAI);
+            const myName = student!.name?.trim();
+            const myFlags = report.flaggedPairs.filter(p =>
+              (p.student1 === myName || p.student2 === myName) && p.similarity === 'high'
+            );
+            if (myFlags.length > 0) {
+              plagiarismDetected = true;
+              finalScore = 0;
+              plagiarismNote = ` ❌ PLÁGIO DETECTADO: ${myFlags.map(f => f.reason).join(' | ')}`;
+              setPlagiarismFlagged(true);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Plágio] Falha na verificação (não bloqueia envio):', e);
+      } finally {
+        setIsPlagiarismChecking(false);
+      }
+    }
+
     setScore(finalScore);
 
     const integrityData = getIntegrityData();
@@ -414,7 +496,7 @@ export const EvaluationView: React.FC = () => {
     const integrityNote = (tabSwitches > 0 || pasteAttempts > 0 || extensionDetected || programmaticInputs > 0)
       ? ` ⚠️ Integridade: ${tabSwitches} saída(s) de tela, ${pasteAttempts} tentativa(s) de colar${extensionDetected ? ', extensão detectada' : ''}${programmaticInputs > 0 ? `, ${programmaticInputs} inserção(ões) programática(s)` : ''}.`
       : '';
-    const generalComment = baseComment + integrityNote;
+    const generalComment = baseComment + integrityNote + plagiarismNote;
 
     try {
       const nowIso = new Date().toISOString();
@@ -437,11 +519,12 @@ export const EvaluationView: React.FC = () => {
           generalComment,
           corrections: correctionDetails,
           integrity: integrityData,
+          plagiarism: plagiarismDetected ? { detected: true, note: plagiarismNote } : null,
         },
         teacher_feedback: null,
         submitted_at: nowIso,
         submission_date: nowIso,
-        status: 'completed',
+        status: plagiarismDetected ? 'plagiarism' : 'completed',
       });
       if (error) throw error;
 
@@ -468,6 +551,31 @@ export const EvaluationView: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans pb-32 transition-colors duration-300">
+
+      {/* ── Marca d'água: overlay fixo com nome+turma+data em diagonal ────── */}
+      {watermarkUrl && !isFinished && !checkingStatus && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 pointer-events-none select-none"
+          style={{
+            backgroundImage: `url(${watermarkUrl})`,
+            backgroundRepeat: 'repeat',
+            zIndex: 9990,
+          }}
+        />
+      )}
+
+      {/* ── Overlay "Verificando originalidade" durante check de plágio ──── */}
+      {isPlagiarismChecking && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 text-center shadow-2xl max-w-xs w-full">
+            <Loader2 className="animate-spin text-vibe-purple mx-auto mb-4" size={36}/>
+            <p className="font-black text-slate-800 dark:text-white tracking-tight">Verificando originalidade…</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">A IA está comparando suas respostas com as demais submissões</p>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal de aviso de infração ───────────────────────────────────── */}
       {violationModalOpen && !examAnnulled && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -709,11 +817,11 @@ export const EvaluationView: React.FC = () => {
 
               <button
                 onClick={handleSubmit}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isPlagiarismChecking}
                 className="w-full bg-gradient-cosmic text-white py-6 rounded-[32px] font-black uppercase tracking-[0.25em] text-sm shadow-glow-purple hover:shadow-glow-pink hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
               >
-                 {isSubmitting ? <Loader2 className="animate-spin"/> : <Send size={20}/>}
-                 🚀 Finalizar e Bloquear Tentativa
+                 {(isSubmitting || isPlagiarismChecking) ? <Loader2 className="animate-spin"/> : <Send size={20}/>}
+                 {isPlagiarismChecking ? '🔍 Verificando Originalidade…' : isSubmitting ? 'Enviando…' : '🚀 Finalizar e Bloquear Tentativa'}
               </button>
            </div>
         ) : examAnnulled ? (
@@ -745,28 +853,38 @@ export const EvaluationView: React.FC = () => {
               </>
             )}
             <div className="relative bg-white dark:bg-slate-900 rounded-[40px] p-12 text-center">
-              <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl animate-float ${alreadyDone ? 'bg-gradient-aurora text-white shadow-glow-cyan' : isEssay ? 'bg-gradient-fire text-white shadow-glow-orange' : 'bg-gradient-fire text-white shadow-glow-orange'}`}>
-                 {alreadyDone ? <Lock size={48}/> : isEssay ? <Pencil size={48} strokeWidth={2.5}/> : <CheckCircle2 size={56} strokeWidth={2.5}/>}
+              <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl animate-float ${alreadyDone ? 'bg-gradient-aurora text-white shadow-glow-cyan' : plagiarismFlagged ? 'bg-red-500 text-white' : isEssay ? 'bg-gradient-fire text-white shadow-glow-orange' : 'bg-gradient-fire text-white shadow-glow-orange'}`}>
+                 {alreadyDone ? <Lock size={48}/> : plagiarismFlagged ? <ShieldAlert size={48}/> : isEssay ? <Pencil size={48} strokeWidth={2.5}/> : <CheckCircle2 size={56} strokeWidth={2.5}/>}
               </div>
               <h2 className="text-4xl md:text-5xl font-black tracking-tighter mb-3 font-display">
-                <span className={alreadyDone ? 'text-gradient-aurora' : 'text-gradient-sunset'}>
+                <span className={alreadyDone ? 'text-gradient-aurora' : plagiarismFlagged ? 'text-red-600 dark:text-red-400' : 'text-gradient-sunset'}>
                   {alreadyDone
                     ? (isEssay ? '🔒 Redação já Enviada' : '🔒 Prova já Realizada')
-                    : (isEssay
-                        ? (essayCorrection ? '🎯 Sua Nota ENEM' : '✍️ Redação Enviada!')
-                        : '🎉 Mandou bem!')}
+                    : plagiarismFlagged
+                      ? '⛔ Plágio Detectado'
+                      : (isEssay
+                          ? (essayCorrection ? '🎯 Sua Nota ENEM' : '✍️ Redação Enviada!')
+                          : '🎉 Mandou bem!')}
                 </span>
               </h2>
               <p className="text-slate-500 dark:text-slate-400 font-bold text-sm tracking-wide mb-2 max-w-md mx-auto">
                 {alreadyDone
                   ? 'Você já usou sua única chance.'
-                  : isEssay
-                    ? (essayCorrection
-                        ? 'A IA corrigiu pelas 5 competências do ENEM. O professor revisa e dá a nota final.'
-                        : 'Sua redação foi enviada. O professor vai avaliar em breve.')
-                    : 'Sua resposta foi enviada e a IA já corrigiu!'}
+                  : plagiarismFlagged
+                    ? 'A IA detectou alta similaridade com respostas de outros alunos. Sua nota foi zerada e o professor foi notificado.'
+                    : isEssay
+                      ? (essayCorrection
+                          ? 'A IA corrigiu pelas 5 competências do ENEM. O professor revisa e dá a nota final.'
+                          : 'Sua redação foi enviada. O professor vai avaliar em breve.')
+                      : 'Sua resposta foi enviada e a IA já corrigiu!'}
               </p>
-              {!alreadyDone && !isEssay && score > 0 && (
+              {plagiarismFlagged && (
+                <div className="inline-flex items-center gap-3 bg-red-500 text-white px-8 py-4 rounded-full shadow-lg mt-4 mb-4">
+                  <ShieldAlert size={22}/>
+                  <span className="font-black text-sm uppercase tracking-widest">Nota: 0 · Plágio</span>
+                </div>
+              )}
+              {!alreadyDone && !isEssay && !plagiarismFlagged && score > 0 && (
                 <div className="inline-flex items-center gap-3 bg-gradient-fire text-white px-8 py-4 rounded-full shadow-glow-orange mt-4 mb-8 animate-pulse-glow">
                   <Award size={24}/>
                   <span className="text-3xl font-black tracking-tighter">{score.toFixed(1)}</span>

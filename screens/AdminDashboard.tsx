@@ -2539,6 +2539,8 @@ export const AdminDashboard: React.FC = () => {
                               : null);
                         return (Number(it?.tab_switches) || 0) > 0 || (Number(it?.paste_attempts) || 0) > 0;
                       }).length;
+                      const plagiarismCount = sortedSubs.filter(s => s.status === 'plagiarism' || s.ai_feedback?.plagiarism?.detected).length;
+                      const annulledCount = sortedSubs.filter(s => s.status === 'annulled').length;
 
                       return (
                         <details key={g.key} className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 shadow-sm group overflow-hidden" open={gIdx === 0 && groups.length === 1}>
@@ -2552,7 +2554,9 @@ export const AdminDashboard: React.FC = () => {
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
                                 Turma {g.school_class} · {sortedSubs.length} {sortedSubs.length === 1 ? 'entrega' : 'entregas'}
                                 {pendingFeedback > 0 && <span className="text-amber-600 dark:text-amber-400"> · {pendingFeedback} sem feedback</span>}
-                                {flaggedCount > 0 && <span className="text-red-600 dark:text-red-400"> · ⚠️ {flaggedCount} c/ alerta</span>}
+                                {flaggedCount > 0 && <span className="text-amber-600 dark:text-amber-400"> · ⚠️ {flaggedCount} alerta</span>}
+                                {plagiarismCount > 0 && <span className="text-red-600 dark:text-red-400 font-black"> · ⛔ {plagiarismCount} plágio</span>}
+                                {annulledCount > 0 && <span className="text-red-700 dark:text-red-300 font-black"> · 🚫 {annulledCount} anulada</span>}
                                 {lastDate && ` · última em ${new Date(lastDate).toLocaleDateString('pt-BR')}`}
                               </p>
                             </div>
