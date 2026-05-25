@@ -17,6 +17,7 @@ export const GradeView: React.FC = () => {
   const [exams, setExams] = useState<any[]>([]);
   const [userSubmissions, setUserSubmissions] = useState<string[]>([]);
   const [publishedLessonIds, setPublishedLessonIds] = useState<string[]>([]);
+  const [lessonTitleOverrides, setLessonTitleOverrides] = useState<Record<string, string>>({});
   const [loadingExams, setLoadingExams] = useState(true);
   
   const subjectKey = searchParams.get('subject') as Subject || 'filosofia';
@@ -92,9 +93,23 @@ export const GradeView: React.FC = () => {
         publishedIds.add(row.lesson_id);
       });
 
+      // Busca títulos customizados pelo professor para as aulas publicadas
+      const publishedIdsList = Array.from(publishedIds);
+      if (publishedIdsList.length > 0) {
+        const { data: overrides } = await supabase
+          .from('lesson_overrides')
+          .select('id, data')
+          .in('id', publishedIdsList);
+        const titleMap: Record<string, string> = {};
+        (overrides || []).forEach((row: any) => {
+          if (row.data?.title) titleMap[row.id] = row.data.title;
+        });
+        setLessonTitleOverrides(titleMap);
+      }
+
       setExams(filteredExams);
       setUserSubmissions(subsKeys);
-      setPublishedLessonIds(Array.from(publishedIds));
+      setPublishedLessonIds(publishedIdsList);
     } catch (e) {
       console.error('Erro ao buscar provas/lições:', e);
     } finally {
@@ -238,7 +253,8 @@ export const GradeView: React.FC = () => {
                       <div className="divide-y divide-slate-50 dark:divide-slate-800">
                         {filteredLessons.map((lesson) => {
                           const isPublished = publishedLessonIds.includes(lesson.id);
-                          const isLessonDone = userSubmissions.includes(lesson.id) || userSubmissions.includes(lesson.title.trim());
+                          const displayLessonTitle = lessonTitleOverrides[lesson.id] || lesson.title;
+                          const isLessonDone = userSubmissions.includes(lesson.id) || userSubmissions.includes(lesson.title.trim()) || userSubmissions.includes(displayLessonTitle.trim());
 
                           if (!isPublished) return null;
 
@@ -249,7 +265,7 @@ export const GradeView: React.FC = () => {
                                </div>
                                <div className="flex-1">
                                   <span className={`font-bold text-sm block transition-colors ${isLessonDone ? 'text-slate-400' : 'text-slate-700 dark:text-slate-200 group-hover:text-vibe-pink'}`}>
-                                    {lesson.title}
+                                    {displayLessonTitle}
                                   </span>
                                   {isLessonDone && <span className="text-[9px] font-black text-vibe-lime uppercase tracking-widest">✓ Atividade entregue</span>}
                                </div>
