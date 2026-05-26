@@ -969,6 +969,12 @@ export const AdminDashboard: React.FC = () => {
         }
         if (lastErr) console.warn('Falha ao criar atividade vínculo:', lastErr);
         fetchSavedActivities();
+      } else {
+        // Atividade já existe: atualiza o prazo se ele foi configurado
+        await supabase
+          .from('activities')
+          .update({ available_until: activityDeadline ? new Date(activityDeadline).toISOString() : null })
+          .eq('lesson_id', selectedLessonForEdit.id);
       }
 
       setNewQuestion({
@@ -3139,6 +3145,8 @@ export const AdminDashboard: React.FC = () => {
                     onChange={setExamTarget}
                   />
 
+                  <DeadlinePicker value={examDeadline} onChange={setExamDeadline} />
+
                   <button
                     onClick={handleGenerateExam}
                     disabled={isGeneratingExam}
@@ -3254,7 +3262,6 @@ export const AdminDashboard: React.FC = () => {
                       Publicar para Alunos
                       </button>
                     </div>
-                    <DeadlinePicker value={examDeadline} onChange={setExamDeadline} />
                   </div>
 
                   <div className="space-y-3">
@@ -3901,20 +3908,23 @@ export const AdminDashboard: React.FC = () => {
 
                  {/* Coluna: Nova Questão */}
                  <div className="space-y-6 bg-slate-50/50 dark:bg-slate-800/30 p-8 rounded-[32px] border dark:border-slate-800 self-start">
-                    {/* Seletor de turmas-alvo da atividade (só pra atividade nova; depois de criada o vínculo já existe) */}
+                    {/* Seletor de turmas-alvo da atividade (só pra atividade nova) */}
                     {!savedActivities.includes(selectedLessonForEdit?.id) && (
-                      <div className="pb-4 mb-2 border-b border-dashed dark:border-slate-700 space-y-4">
+                      <div className="pb-2 mb-2 border-b border-dashed dark:border-slate-700 space-y-3">
                         <TargetClassPicker
                           availableClasses={classesForGrade(String(selectedLessonForEdit?.id?.charAt(0) || ''))}
                           value={activityTarget}
                           onChange={setActivityTarget}
                         />
-                        <DeadlinePicker value={activityDeadline} onChange={setActivityDeadline} />
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-2 ml-2 italic">
-                          A segmentação e o prazo se aplicam quando a primeira questão for adicionada.
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-2 italic">
+                          A segmentação se aplica quando a primeira questão for adicionada.
                         </p>
                       </div>
                     )}
+                    {/* Prazo: sempre visível — atualiza o banco ao salvar qualquer questão */}
+                    <div className="pb-4 mb-2 border-b border-dashed dark:border-slate-700">
+                      <DeadlinePicker value={activityDeadline} onChange={setActivityDeadline} />
+                    </div>
                     <h4 className="text-[10px] font-black text-tocantins-blue dark:text-tocantins-yellow uppercase tracking-widest flex items-center gap-2">
                        <Wand2 size={14}/> Cadastrar Novo Item
                     </h4>
