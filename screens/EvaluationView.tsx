@@ -59,6 +59,7 @@ export const EvaluationView: React.FC = () => {
   // ── Anti-cola: timer + violações + plágio ────────────────────────────────
   const [timeLeft, setTimeLeft] = useState(EXAM_DURATION_SECS);
   const [examAnnulled, setExamAnnulled] = useState(false);
+  const [deadlineExpired, setDeadlineExpired] = useState(false);
   const [violationModalOpen, setViolationModalOpen] = useState(false);
   const [isPlagiarismChecking, setIsPlagiarismChecking] = useState(false);
   const [plagiarismFlagged, setPlagiarismFlagged] = useState(false);
@@ -138,6 +139,14 @@ export const EvaluationView: React.FC = () => {
         return;
       }
       setExam(examData);
+
+      // Verifica se o prazo de entrega passou
+      if (examData.available_until && new Date(examData.available_until) < new Date()) {
+        setDeadlineExpired(true);
+        setIsFinished(true);
+        setCheckingStatus(false);
+        return;
+      }
 
       // Detecta tipo (redação vs simulado) e monta o título esperado da submissão
       const isEssayExam = examData.type === 'essay' || (examData.questions?.[0]?.type === 'essay');
@@ -838,6 +847,24 @@ export const EvaluationView: React.FC = () => {
                  {isPlagiarismChecking ? '🔍 Verificando Originalidade…' : isSubmitting ? 'Enviando…' : '🚀 Finalizar e Bloquear Tentativa'}
               </button>
            </div>
+        ) : deadlineExpired ? (
+          /* ── Tela de prazo encerrado ─────────────────────────────────────── */
+          <div className="bg-gradient-to-br from-slate-700 to-slate-900 p-1 rounded-[44px] shadow-2xl animate-in zoom-in duration-500">
+            <div className="bg-white dark:bg-slate-900 rounded-[40px] p-12 text-center">
+              <div className="w-28 h-28 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-6 text-6xl">⏰</div>
+              <h2 className="text-4xl font-black tracking-tighter mb-3 text-slate-700 dark:text-slate-300">Prazo Encerrado</h2>
+              <p className="text-slate-600 dark:text-slate-400 font-bold text-sm mb-8 max-w-md mx-auto leading-relaxed">
+                O prazo para realizar esta avaliação foi encerrado.<br/>
+                {exam?.available_until && (
+                  <span>Encerrou em <strong>{new Date(exam.available_until).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' })}</strong>.</span>
+                )}<br/>
+                Fale com seu professor para mais informações.
+              </p>
+              <Link to="/" className="block bg-slate-900 dark:bg-slate-800 text-white py-4 px-8 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all">
+                Voltar ao Início
+              </Link>
+            </div>
+          </div>
         ) : examAnnulled ? (
           /* ── Tela de prova anulada ─────────────────────────────────────────── */
           <div className="bg-gradient-to-br from-red-600 to-red-900 p-1 rounded-[44px] shadow-2xl animate-in zoom-in duration-500">

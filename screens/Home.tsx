@@ -196,6 +196,8 @@ export const Home: React.FC = () => {
   //   - redação:  lesson_title = "Redação: <título>"
   //   - simulado: lesson_title = "Avaliação Bimestral: Xº Bimestre" (ou customizado)
   const pendingExams = exams.filter(e => {
+    // Prazo encerrado → não aparece mais como pendente
+    if (e.available_until && new Date(e.available_until) < new Date()) return false;
     const isEssayItem = e.type === 'essay' || e.questions?.[0]?.type === 'essay';
     const expectedTitle = isEssayItem
       ? `Redação: ${(e.title || 'Redação').trim()}`

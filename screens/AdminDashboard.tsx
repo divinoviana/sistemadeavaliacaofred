@@ -235,6 +235,92 @@ const TargetClassPicker: React.FC<{
   );
 };
 
+// ── DeadlinePicker ─────────────────────────────────────────────────────────
+const DEADLINE_PRESETS: { label: string; hours: number | null }[] = [
+  { label: 'Sem prazo', hours: null },
+  { label: '1 hora', hours: 1 },
+  { label: '3 horas', hours: 3 },
+  { label: '1 dia', hours: 24 },
+  { label: '3 dias', hours: 72 },
+  { label: '7 dias', hours: 168 },
+  { label: '15 dias', hours: 360 },
+  { label: '30 dias', hours: 720 },
+];
+
+const toLocalDatetimeStr = (d: Date): string =>
+  new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+const DeadlinePicker: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
+  const [showCustom, setShowCustom] = useState(false);
+  const activePreset = value === ''
+    ? 'Sem prazo'
+    : DEADLINE_PRESETS.find(p => p.hours !== null && Math.abs(
+        new Date(value).getTime() - (Date.now() + (p.hours ?? 0) * 3_600_000)
+      ) < 60_000)?.label ?? 'personalizado';
+
+  return (
+    <div className="space-y-3">
+      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2 block">
+        ⏰ Prazo de Entrega
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {DEADLINE_PRESETS.map(p => {
+          const isActive = p.hours === null ? value === '' : false;
+          return (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => {
+                setShowCustom(false);
+                if (p.hours === null) { onChange(''); }
+                else {
+                  const d = new Date();
+                  d.setTime(d.getTime() + p.hours * 3_600_000);
+                  onChange(toLocalDatetimeStr(d));
+                }
+              }}
+              className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all cursor-pointer ${
+                (p.hours === null ? value === '' : false)
+                  ? 'bg-tocantins-blue text-white border-tocantins-blue shadow-md'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-tocantins-blue/50'
+              }`}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setShowCustom(v => !v)}
+          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all cursor-pointer ${
+            showCustom
+              ? 'bg-vibe-purple text-white border-vibe-purple shadow-md'
+              : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-vibe-purple/50'
+          }`}
+        >
+          📅 Personalizado
+        </button>
+      </div>
+      {showCustom && (
+        <input
+          type="datetime-local"
+          value={value}
+          min={toLocalDatetimeStr(new Date())}
+          onChange={e => onChange(e.target.value)}
+          className="w-full bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-vibe-purple/20"
+        />
+      )}
+      {value ? (
+        <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 ml-2">
+          ⏱ Encerra em: {new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+        </p>
+      ) : (
+        <p className="text-[10px] font-medium text-slate-400 ml-2 italic">Sem prazo definido — disponível indefinidamente.</p>
+      )}
+    </div>
+  );
+};
+
 // Componente principal do Painel Administrativo
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -303,6 +389,7 @@ export const AdminDashboard: React.FC = () => {
     difficulty: 'Médio',
     explanation: '',
   });
+  const [examDeadline, setExamDeadline] = useState('');   // '' = sem prazo
   const [isGeneratingExam, setIsGeneratingExam] = useState(false);
   const [isPublishingExam, setIsPublishingExam] = useState(false);
   const [publishedExams, setPublishedExams] = useState<any[]>([]);
@@ -338,6 +425,8 @@ export const AdminDashboard: React.FC = () => {
   const [essayBimester, setEssayBimester] = useState('1');
   const [essayClass, setEssayClass] = useState('all');
   const [essayInstructions, setEssayInstructions] = useState('');
+  const [essayDeadline, setEssayDeadline] = useState('');  // '' = sem prazo
+  const [activityDeadline, setActivityDeadline] = useState(''); // '' = sem prazo
   const [isPublishingEssay, setIsPublishingEssay] = useState(false);
   const [publishedEssays, setPublishedEssays] = useState<any[]>([]);
   
@@ -862,6 +951,7 @@ export const AdminDashboard: React.FC = () => {
         const actPayload: any = {
           lesson_id: selectedLessonForEdit.id,
           title: `Atividade: ${selectedLessonForEdit.title}`,
+          available_until: activityDeadline ? new Date(activityDeadline).toISOString() : null,
         };
         // A tabela `activities` só tem `school_classes` (jsonb array).
         // Tanto turma única quanto várias turmas vão pro mesmo campo.
@@ -1240,6 +1330,7 @@ export const AdminDashboard: React.FC = () => {
         school_class: schoolClassSingle,
         school_classes: schoolClassesArray,
         topics: [],
+        available_until: essayDeadline ? new Date(essayDeadline).toISOString() : null,
         // Pra reusar a infra do simulado, guardamos a redação como
         // uma única "questão" do tipo essay com o título no enunciado.
         questions: [{
@@ -1271,6 +1362,7 @@ export const AdminDashboard: React.FC = () => {
       alert('Redação publicada! Os alunos já podem fazer.');
       setEssayTitle('');
       setEssayInstructions('');
+      setEssayDeadline('');
       fetchPublishedExams();
     } catch (e: any) {
       alert('Erro ao publicar redação: ' + (e?.message || ''));
@@ -1390,6 +1482,7 @@ export const AdminDashboard: React.FC = () => {
         school_classes: schoolClassesArray,
         topics: examTopics.split(',').map(t => t.trim()).filter(Boolean),
         questions: examQuestionsDraft,
+        available_until: examDeadline ? new Date(examDeadline).toISOString() : null,
       };
 
       // Insere em modo "tolerante a schema": se uma coluna não existir,
@@ -1427,6 +1520,7 @@ export const AdminDashboard: React.FC = () => {
       setExamQuestionsDraft([]);
       setExamTitle('');
       setExamTopics('');
+      setExamDeadline('');
       fetchPublishedExams();
     } catch (e: any) {
       alert('Erro ao publicar: ' + (e?.message || ''));
@@ -3145,19 +3239,22 @@ export const AdminDashboard: React.FC = () => {
               {/* MÓDULO 3: Lista de questões no rascunho */}
               {examQuestionsDraft.length > 0 && (
                 <div className="bg-white dark:bg-slate-900 rounded-[40px] border dark:border-slate-800 p-8 shadow-sm">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-tight">Questões do Simulado</h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{examQuestionsDraft.length} questões adicionadas</p>
-                    </div>
-                    <button
-                      onClick={handlePublishExam}
-                      disabled={isPublishingExam}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-tight">Questões do Simulado</h3>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{examQuestionsDraft.length} questões adicionadas</p>
+                      </div>
+                      <button
+                        onClick={handlePublishExam}
+                        disabled={isPublishingExam}
                       className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
                     >
                       {isPublishingExam ? <Loader2 className="animate-spin" size={14}/> : <Send size={14}/>}
                       Publicar para Alunos
-                    </button>
+                      </button>
+                    </div>
+                    <DeadlinePicker value={examDeadline} onChange={setExamDeadline} />
                   </div>
 
                   <div className="space-y-3">
@@ -3211,6 +3308,11 @@ export const AdminDashboard: React.FC = () => {
                               {exam.bimester}º Bimestre • {exam.grade}ª Série • {exam.school_class || 'Todas as turmas'} • {(exam.questions?.length || 0)} questões
                               {exam.created_at && ` • ${new Date(exam.created_at).toLocaleDateString('pt-BR')}`}
                             </p>
+                            {exam.available_until && (
+                              <p className={`text-[9px] font-black uppercase tracking-widest mt-0.5 ${new Date(exam.available_until) < new Date() ? 'text-red-500' : 'text-amber-500'}`}>
+                                ⏰ {new Date(exam.available_until) < new Date() ? 'Encerrado' : 'Prazo'}: {new Date(exam.available_until).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -3297,6 +3399,8 @@ export const AdminDashboard: React.FC = () => {
                       onChange={setEssayTarget}
                     />
 
+                    <DeadlinePicker value={essayDeadline} onChange={setEssayDeadline} />
+
                     <button
                       onClick={handlePublishEssay}
                       disabled={isPublishingEssay || !essayTitle.trim()}
@@ -3336,6 +3440,11 @@ export const AdminDashboard: React.FC = () => {
                               {es.bimester}º Bimestre · {es.grade}ª Série · {es.school_class || 'Todas as turmas'}
                               {es.created_at && ` · ${new Date(es.created_at).toLocaleDateString('pt-BR')}`}
                             </p>
+                            {es.available_until && (
+                              <p className={`text-[9px] font-black uppercase tracking-widest mt-0.5 ${new Date(es.available_until) < new Date() ? 'text-red-500' : 'text-amber-500'}`}>
+                                ⏰ {new Date(es.available_until) < new Date() ? 'Encerrado' : 'Prazo'}: {new Date(es.available_until).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <button
@@ -3794,14 +3903,15 @@ export const AdminDashboard: React.FC = () => {
                  <div className="space-y-6 bg-slate-50/50 dark:bg-slate-800/30 p-8 rounded-[32px] border dark:border-slate-800 self-start">
                     {/* Seletor de turmas-alvo da atividade (só pra atividade nova; depois de criada o vínculo já existe) */}
                     {!savedActivities.includes(selectedLessonForEdit?.id) && (
-                      <div className="pb-4 mb-2 border-b border-dashed dark:border-slate-700">
+                      <div className="pb-4 mb-2 border-b border-dashed dark:border-slate-700 space-y-4">
                         <TargetClassPicker
                           availableClasses={classesForGrade(String(selectedLessonForEdit?.id?.charAt(0) || ''))}
                           value={activityTarget}
                           onChange={setActivityTarget}
                         />
+                        <DeadlinePicker value={activityDeadline} onChange={setActivityDeadline} />
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-2 ml-2 italic">
-                          A segmentação se aplica quando a primeira questão for adicionada.
+                          A segmentação e o prazo se aplicam quando a primeira questão for adicionada.
                         </p>
                       </div>
                     )}

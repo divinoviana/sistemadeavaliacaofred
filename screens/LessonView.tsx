@@ -20,6 +20,8 @@ export const LessonView: React.FC = () => {
   const { student, isLoading } = useAuth();
 
   const [lessonActivity, setLessonActivity] = useState<LessonActivity | null>(null);
+  const [activityDeadlineExpired, setActivityDeadlineExpired] = useState(false);
+  const [activityDeadlineStr, setActivityDeadlineStr] = useState<string | null>(null);
   const [lessonOverride, setLessonOverride] = useState<any>(null);
   const [isActivityLoading, setIsActivityLoading] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -73,6 +75,14 @@ export const LessonView: React.FC = () => {
           return;
         }
         const actData = actRows[0] as any;
+
+        // Verifica prazo de entrega da atividade
+        if (actData.available_until) {
+          setActivityDeadlineStr(actData.available_until);
+          if (new Date(actData.available_until) < new Date()) {
+            setActivityDeadlineExpired(true);
+          }
+        }
 
         // 2. Questões da atividade
         // Suporta dois modelos: questions.lesson_id (legado) ou activities.question_ids (jsonb)
@@ -426,7 +436,7 @@ export const LessonView: React.FC = () => {
         </div>
       </div>
 
-      {student && (
+      {student && !activityDeadlineExpired && (
         <SubmissionBar
           studentName={student.name}
           schoolClass={student.school_class}
@@ -439,6 +449,18 @@ export const LessonView: React.FC = () => {
           theory={displayTheory || ''}
           integrityData={getIntegrityData()}
         />
+      )}
+      {activityDeadlineExpired && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-t-4 border-slate-600 p-4 text-center">
+          <p className="text-white font-black text-sm uppercase tracking-widest">
+            ⏰ Prazo encerrado — esta atividade não aceita mais entregas.
+            {activityDeadlineStr && (
+              <span className="ml-2 font-medium text-slate-300 normal-case tracking-normal">
+                (encerrou em {new Date(activityDeadlineStr).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })})
+              </span>
+            )}
+          </p>
+        </div>
       )}
     </div>
   );
