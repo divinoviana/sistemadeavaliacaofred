@@ -918,6 +918,15 @@ export const AdminDashboard: React.FC = () => {
     setSelectedLessonForEdit({ ...lesson, title: displayTitle });
     setIsActivityEditorOpen(true);
     setActivityQuestionsDraft([]);
+    setEditingActivityQuestion(null);
+
+    // Carrega prazo existente desta atividade
+    const existingActivity = activityBank.find((a: any) => a.lesson_id === lesson.id);
+    if (existingActivity?.available_until) {
+      setActivityDeadline(toLocalDatetimeStr(new Date(existingActivity.available_until)));
+    } else {
+      setActivityDeadline('');
+    }
 
     try {
       const { data, error } = await supabase
@@ -990,11 +999,14 @@ export const AdminDashboard: React.FC = () => {
         if (lastErr) console.warn('Falha ao criar atividade vínculo:', lastErr);
         fetchSavedActivities();
       } else {
-        // Atividade já existe: atualiza o prazo se ele foi configurado
-        await supabase
-          .from('activities')
-          .update({ available_until: activityDeadline ? new Date(activityDeadline).toISOString() : null })
-          .eq('lesson_id', selectedLessonForEdit.id);
+        // Atividade já existe: só atualiza o prazo se o teacher explicitamente preencheu um
+        // (não reseta available_until para null quando o campo está vazio)
+        if (activityDeadline) {
+          await supabase
+            .from('activities')
+            .update({ available_until: new Date(activityDeadline).toISOString() })
+            .eq('lesson_id', selectedLessonForEdit.id);
+        }
       }
 
       setNewQuestion({
@@ -1578,15 +1590,17 @@ export const AdminDashboard: React.FC = () => {
     if (!editingPublishedExam) return;
     setIsSavingEditedExam(true);
     try {
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('bimonthly_exams')
         .update({
           title: editExamTitle.trim(),
           questions: editExamQuestions,
           available_until: editExamDeadline ? new Date(editExamDeadline).toISOString() : null,
         })
-        .eq('id', editingPublishedExam.id);
+        .eq('id', editingPublishedExam.id)
+        .select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) throw new Error('Nenhuma linha atualizada — verifique permissões.');
       setEditingPublishedExam(null);
       fetchPublishedExams();
       alert('Simulado atualizado com sucesso!');
@@ -1610,15 +1624,17 @@ export const AdminDashboard: React.FC = () => {
     setIsSavingEditedEssay(true);
     try {
       const updatedQ = [{ ...(editingPublishedEssay.questions?.[0] || {}), questionText: editEssayTitle.trim(), instructions: editEssayInstructions.trim() || null }];
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('bimonthly_exams')
         .update({
           title: editEssayTitle.trim(),
           questions: updatedQ,
           available_until: editEssayDeadline ? new Date(editEssayDeadline).toISOString() : null,
         })
-        .eq('id', editingPublishedEssay.id);
+        .eq('id', editingPublishedEssay.id)
+        .select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) throw new Error('Nenhuma linha atualizada — verifique permissões.');
       setEditingPublishedEssay(null);
       fetchPublishedExams();
       alert('Redação atualizada com sucesso!');
@@ -1634,11 +1650,13 @@ export const AdminDashboard: React.FC = () => {
     if (!selectedLessonForEdit) return;
     setIsSavingActivityDeadline(true);
     try {
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('activities')
         .update({ available_until: activityDeadline ? new Date(activityDeadline).toISOString() : null })
-        .eq('lesson_id', selectedLessonForEdit.id);
+        .eq('lesson_id', selectedLessonForEdit.id)
+        .select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) throw new Error('Nenhuma atividade encontrada para esta aula. Adicione pelo menos uma questão antes de definir o prazo.');
       alert('Prazo atualizado!');
     } catch (e: any) {
       alert('Erro ao salvar prazo: ' + e.message);
@@ -1658,17 +1676,22 @@ export const AdminDashboard: React.FC = () => {
     try {
       const payload: any = {
         question_text: editActivityQDraft.question_text,
-        options: editActivityQDraft.options,
-        correct_option: editActivityQDraft.correct_option,
+        options: editActivityQDraft.type === 'discursive' ? null : editActivityQDraft.options,
+        correct_option: editActivityQDraft.type === 'discursive' ? null : editActivityQDraft.correct_option,
       };
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('questions')
         .update(payload)
-        .eq('id', editingActivityQuestion.id);
+        .eq('id', editingActivityQuestion.id)
+        .select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        throw new Error('Nenhuma linha atualizada — verifique permissões (RLS) ou se a questão ainda existe.');
+      }
       // Atualiza draft local imediatamente
       setActivityQuestionsDraft(prev => prev.map(q => q.id === editingActivityQuestion.id ? { ...q, ...payload } : q));
       setEditingActivityQuestion(null);
+      // toast via botão: sem alert poluindo a tela
     } catch (e: any) {
       alert('Erro ao salvar questão: ' + e.message);
     }
